@@ -1,0 +1,32 @@
+rules_version = '2';
+
+// NOLA – Space Trainer security rules.
+//
+// Every student's data lives under users/{their own user id}. A signed-in
+// student can read and write only inside their own folder. Everything else
+// in the database is denied by default.
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isOwner(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+
+    // The profile must always carry a sensible display name.
+    function hasValidProfile() {
+      let name = request.resource.data.displayName;
+      return name is string && name.size() >= 2 && name.size() <= 20;
+    }
+
+    match /users/{userId} {
+      allow read, delete: if isOwner(userId);
+      allow create, update: if isOwner(userId) && hasValidProfile();
+
+      // Lesson progress, simulation saves, achievements and so on
+      // (added in later milestones) live in sub-collections here.
+      match /{document=**} {
+        allow read, write: if isOwner(userId);
+      }
+    }
+  }
+}
