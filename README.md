@@ -4,19 +4,22 @@
 
 An educational space-survival platform for ages 10–16: interactive lessons (NOLA Academy), a top-down space-station simulation (NOLA Mission) and a friendly robot companion (NOLA).
 
-## Current status: Milestone 1 – Foundation
+## Current status: Batch 1 complete (Milestones 1–2: Foundation and UI/UX)
 
 | Works now | Not built yet |
 |---|---|
-| Sign up, log in, log out, password reset (Firebase Authentication) | Lessons and quizzes (Milestone 3) |
-| Sessions remembered between visits; protected pages | The station game (Milestones 4–5) |
-| A private profile per student in Cloud Firestore | NOLA chat and AI (Milestone 6) |
-| App layout and navigation for desktop and mobile | NASA data (Milestone 7) |
-| Firestore security rules | Avatar, accessibility settings (Milestone 2) |
+| Sign up, log in, log out, password reset (Firebase Authentication) | Lesson content, quizzes, progress and unlocking (Batch 2) |
+| Sessions remembered between visits; protected pages | Simulation engine (Batch 2) |
+| A private profile per student in Cloud Firestore, with offline-safe saving | The playable station game (Batch 3) |
+| Mission Control dashboard: greeting, crew card, training progress, station systems | NOLA chat, AI and NASA data (Batch 4) |
+| Academy training path: all eight modules with previews of what they cover and unlock | |
+| Astronaut avatar editor (suit, visor, accessory) | |
+| Accessibility: text size, high contrast, easy-reading font, reduced motion, read-aloud voice with speed and volume | |
+| NOLA mascot with four expressions and a wave | |
 
-Pages for unbuilt modules say plainly that they are under construction.
+Pages for unbuilt features say plainly that they are not ready. Until lessons exist, no module can be completed, so every station system shows as locked.
 
-The NOLA robot drawing is a stand-in based on the written brief. It will be redrawn from the official reference image (`src/features/companion/NolaMascot.tsx` is the only file that changes).
+The NOLA mascot is an original vector character based on the reference artwork in `docs/reference/` (same colours, LED smile-eyes, antenna and chest badge; its own silhouette).
 
 ## Getting started
 
@@ -61,7 +64,8 @@ Open the address it prints (usually http://localhost:5173).
 - **Tailwind CSS** – styling, with NOLA's colours and fonts defined once in `src/index.css`.
 - **React Router** – page navigation and protected routes.
 - **Firebase Authentication + Cloud Firestore** – accounts and per-student data, with no server of our own to run.
-- **Self-hosted fonts** (Fredoka, Nunito) – no requests to third-party font servers from a children's app.
+- **Self-hosted fonts** (Fredoka, Nunito, Lexend) – no requests to third-party font servers from a children's app.
+- **Browser speech synthesis** – read-aloud uses the voice built into the browser, so it is free and sends no text to any service.
 - **Vitest** – unit tests.
 - **Phaser 3** (from Milestone 4) – the 2D game. It will be loaded only on the Mission page.
 
@@ -71,16 +75,31 @@ Open the address it prints (usually http://localhost:5173).
 src/
 ├── app/            Route map, page frame (navigation), route guards
 ├── pages/          Top-level pages
-├── components/     Reusable UI pieces (Button, TextField, Logo)
+├── components/     Reusable UI pieces (Button, TextField, OptionGroup, Logo)
 ├── features/
-│   ├── auth/       Sign-in state, forms, validation, friendly error messages
-│   └── companion/  NOLA mascot and speech bubble
+│   ├── auth/           Sign-in state, forms, validation, friendly error messages
+│   ├── academy/        The curriculum (one list of modules) and progress hook
+│   ├── accessibility/  Settings, their storage, the settings panel, read-aloud
+│   ├── companion/      NOLA mascot and speech bubble
+│   └── profile/        Astronaut avatar, its options and editor
 ├── services/       Firebase start-up and Firestore access (repositories)
 └── types/          Shared TypeScript types
 firestore.rules     Who may read and write what in the database
+docs/reference/     Design reference artwork (not shipped in the app)
 ```
 
-Folders for lessons, the simulation engine, the game and space data are added in their milestones.
+Folders for lessons, the simulation engine, the game and space data are added in their batches.
+
+## Each student's data
+
+```
+users/{uid}                     profile: displayName, avatar, accessibility settings
+users/{uid}/academy/{moduleId}  lesson progress and quiz results   (Batch 2)
+users/{uid}/achievements/{id}   earned badges                      (Batch 2)
+users/{uid}/simulation/{slot}   saved game state                   (Batch 3)
+```
+
+Accessibility settings are also kept in the browser so they work on the login page. Once signed in, the copy on the account wins and follows the student to other devices.
 
 ## How data is protected
 

@@ -1,34 +1,41 @@
-import { ArrowRight, Hammer } from 'lucide-react';
+import { ArrowRight, Check, Lock, Palette } from 'lucide-react';
 import { Link } from 'react-router';
-import { NAV_ITEMS } from '../app/navigation';
+import { buttonClasses } from '../components/Button';
+import { CURRICULUM } from '../features/academy/curriculum';
+import { useAcademyProgress } from '../features/academy/useAcademyProgress';
 import { useAuth } from '../features/auth/AuthContext';
 import { NolaMascot } from '../features/companion/NolaMascot';
 import { SpeechBubble } from '../features/companion/SpeechBubble';
+import { AstronautAvatar } from '../features/profile/AstronautAvatar';
+import { DEFAULT_AVATAR } from '../features/profile/avatarOptions';
 
-/** What each module will be, and when it gets built. Honest about status. */
-const MODULE_INFO: Record<string, { blurb: string; status: string; ready: boolean }> = {
-  '/academy': { blurb: 'Short lessons on food, oxygen, water, energy and radiation.', status: 'Being built', ready: false },
-  '/mission': { blurb: 'Explore your own space station and keep it running.', status: 'Being built', ready: false },
-  '/companion': { blurb: 'Ask NOLA questions about living in space.', status: 'Being built', ready: false },
-  '/profile': { blurb: 'Your astronaut ID card and account.', status: 'Ready', ready: true },
-};
+function timeOfDayGreeting(): string {
+  const hour = new Date().getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 18) return 'Good afternoon';
+  return 'Good evening';
+}
 
 export function MissionControlPage() {
   const { profile, profileError } = useAuth();
+  const { completedModuleIds } = useAcademyProgress();
+
   const name = profile?.displayName;
+  const greeting = name ? `${timeOfDayGreeting()}, ${name}!` : `${timeOfDayGreeting()}!`;
+  const message =
+    'Welcome to Mission Control. Your station is waiting, but its systems are switched off. Each Academy module you pass will bring one online.';
+
+  const total = CURRICULUM.length;
+  const completed = CURRICULUM.filter((module) => completedModuleIds.includes(module.id)).length;
+  const nextModule = CURRICULUM.find((module) => !completedModuleIds.includes(module.id));
 
   return (
     <div className="space-y-10">
       <section className="animate-rise flex flex-col items-center gap-6 sm:flex-row sm:items-start">
-        <NolaMascot size={150} className="shrink-0" />
-        <SpeechBubble pointer="left" className="flex-1">
-          <h1 className="font-display text-2xl font-semibold sm:text-3xl">
-            {name ? `Welcome aboard, ${name}!` : 'Welcome aboard!'}
-          </h1>
-          <p className="mt-2">
-            This is Mission Control. Your space station is still under construction, so some doors are closed for now.
-            I'll open each one as it's finished!
-          </p>
+        <NolaMascot waving size={160} className="shrink-0" />
+        <SpeechBubble pointer="left" className="flex-1" readAloudText={`${greeting} ${message}`}>
+          <h1 className="font-display text-2xl font-semibold sm:text-3xl">{greeting}</h1>
+          <p className="mt-2">{message}</p>
         </SpeechBubble>
       </section>
 
@@ -39,40 +46,81 @@ export function MissionControlPage() {
         </p>
       )}
 
-      <section aria-labelledby="modules-heading">
-        <h2 id="modules-heading" className="mb-4 text-2xl font-semibold">
-          Station modules
+      <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
+        {/* Crew card */}
+        <section aria-label="Your astronaut" className="flex flex-col items-center rounded-3xl border-2 border-line bg-hull/80 p-6 text-center">
+          <AstronautAvatar avatar={profile?.avatar ?? DEFAULT_AVATAR} size={120} />
+          <p className="mt-3 break-words font-display text-2xl font-semibold">{name ?? '…'}</p>
+          <p className="font-bold uppercase tracking-widest text-glow">Space Cadet</p>
+          <Link to="/profile" className={buttonClasses('secondary', 'mt-4 text-base')}>
+            <Palette aria-hidden="true" size={18} /> Customise
+          </Link>
+        </section>
+
+        {/* Training progress */}
+        <section aria-labelledby="training-heading" className="rounded-3xl border-2 border-line bg-hull/80 p-6">
+          <h2 id="training-heading" className="text-2xl font-semibold">
+            Your training
+          </h2>
+          <p className="mt-1 text-lg text-mist">
+            {completed} of {total} modules completed
+          </p>
+          <div
+            role="progressbar"
+            aria-label="Academy modules completed"
+            aria-valuemin={0}
+            aria-valuemax={total}
+            aria-valuenow={completed}
+            className="mt-3 flex gap-1.5"
+          >
+            {CURRICULUM.map((module) => (
+              <span
+                key={module.id}
+                className={`h-4 flex-1 rounded-full border-2 ${
+                  completedModuleIds.includes(module.id) ? 'border-go bg-go' : 'border-line bg-void/60'
+                }`}
+              />
+            ))}
+          </div>
+
+          {nextModule && (
+            <div className="mt-6 rounded-2xl border-2 border-line bg-void/40 p-4">
+              <p className="text-sm font-bold uppercase tracking-widest text-mist">Next up · Module {nextModule.number}</p>
+              <p className="mt-1 font-display text-xl font-semibold">{nextModule.title}</p>
+              <p className="text-mist">{nextModule.tagline}</p>
+            </div>
+          )}
+          <Link to="/academy" className={buttonClasses('primary', 'mt-5')}>
+            See the training path <ArrowRight aria-hidden="true" size={20} />
+          </Link>
+        </section>
+      </div>
+
+      {/* Station systems */}
+      <section aria-labelledby="systems-heading">
+        <h2 id="systems-heading" className="text-2xl font-semibold">
+          Station systems
         </h2>
-        <ul className="grid gap-4 sm:grid-cols-2">
-          {NAV_ITEMS.filter((item) => item.to !== '/').map(({ to, label, icon: Icon }) => {
-            const info = MODULE_INFO[to];
-            if (!info) return null;
+        <p className="mb-4 mt-1 text-lg text-mist">Learn it in the Academy, then run it on your station.</p>
+        <ul className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          {CURRICULUM.map((module) => {
+            const Icon = module.icon;
+            const online = completedModuleIds.includes(module.id);
             return (
-              <li key={to}>
-                <Link
-                  to={to}
-                  className="group flex h-full flex-col rounded-3xl border-2 border-line bg-hull/80 p-6 transition hover:-translate-y-1 hover:border-glow"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-panel text-glow">
-                      <Icon aria-hidden="true" size={30} />
-                    </span>
-                    <span
-                      className={`inline-flex items-center gap-1.5 rounded-full border-2 px-3 py-1 text-sm font-bold ${
-                        info.ready ? 'border-go text-go' : 'border-nola-soft text-nola-soft'
-                      }`}
-                    >
-                      {info.ready ? <span aria-hidden="true">✓</span> : <Hammer aria-hidden="true" size={14} />}
-                      {info.status}
-                    </span>
-                  </div>
-                  <h3 className="mt-4 text-xl font-semibold">{label}</h3>
-                  <p className="mt-1 flex-1 text-mist">{info.blurb}</p>
-                  <span className="mt-4 inline-flex items-center gap-2 font-semibold text-glow">
-                    Take a look
-                    <ArrowRight aria-hidden="true" size={18} className="transition group-hover:translate-x-1" />
+              <li
+                key={module.id}
+                className={`flex items-center gap-3 rounded-2xl border-2 p-4 ${online ? 'border-go bg-go/10' : 'border-line bg-hull/60'}`}
+              >
+                <span className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-panel ${online ? 'text-go' : 'text-mist'}`}>
+                  <Icon aria-hidden="true" size={26} />
+                </span>
+                <span className="min-w-0">
+                  <span className="block font-display text-lg font-medium leading-tight">{module.unlock.name}</span>
+                  <span className={`mt-0.5 inline-flex items-center gap-1.5 text-sm font-bold ${online ? 'text-go' : 'text-mist'}`}>
+                    {online ? <Check aria-hidden="true" size={14} /> : <Lock aria-hidden="true" size={14} />}
+                    {online ? 'Online' : `Locked · Module ${module.number}`}
                   </span>
-                </Link>
+                </span>
               </li>
             );
           })}

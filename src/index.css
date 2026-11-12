@@ -24,6 +24,7 @@
   --animate-float: float 5s ease-in-out infinite;
   --animate-blink: blink 4.5s infinite;
   --animate-rise: rise 0.45s ease-out both;
+  --animate-wave: wave 1.6s ease-in-out infinite;
 
   @keyframes float {
     0%, 100% { transform: translateY(0); }
@@ -32,6 +33,10 @@
   @keyframes blink {
     0%, 92%, 100% { transform: scaleY(1); }
     96% { transform: scaleY(0.1); }
+  }
+  @keyframes wave {
+    0%, 100% { transform: rotate(-8deg); }
+    50% { transform: rotate(6deg); }
   }
   @keyframes rise {
     from { opacity: 0; transform: translateY(10px); }
@@ -47,6 +52,8 @@
   body {
     @apply bg-void font-body text-star antialiased;
     min-height: 100dvh;
+    /* Long words wrap, never push the page wider than a small screen. */
+    overflow-wrap: anywhere;
   }
 
   h1, h2, h3 {
@@ -82,6 +89,40 @@
     var(--color-void);
 }
 
+/*
+ * Accessibility settings. The attributes below are set on <html> by
+ * src/features/accessibility/settings.ts.
+ */
+
+/* Text size: everything is sized in rem, so this scales the whole app. */
+html[data-text-size="large"] { font-size: 112.5%; }
+html[data-text-size="xlarge"] { font-size: 125%; }
+
+/* Dyslexia-friendly typeface for all text. */
+html[data-font="dyslexia"] {
+  --font-display: "Lexend Variable", Verdana, sans-serif;
+  --font-body: "Lexend Variable", Verdana, sans-serif;
+  letter-spacing: 0.035em;
+  word-spacing: 0.12em;
+  line-height: 1.7;
+}
+
+/* High contrast: pure black surfaces, white text, bright outlines. */
+html[data-contrast="high"] {
+  --color-void: #000000;
+  --color-hull: #000000;
+  --color-panel: #101010;
+  --color-line: #ffffff;
+  --color-star: #ffffff;
+  --color-mist: #ffffff;
+  --color-nola: #ffa24d;
+  --color-nola-soft: #ffc48a;
+  --color-glow: #7df3ff;
+  --color-alert: #ffb3bf;
+  --color-go: #8dffc4;
+}
+html[data-contrast="high"] .starfield { background: #000; }
+
 /* Children who are sensitive to motion get a still interface. */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {
@@ -89,4 +130,11 @@
     transition: none !important;
     scroll-behavior: auto !important;
   }
+}
+html[data-motion="reduced"] *,
+html[data-motion="reduced"] *::before,
+html[data-motion="reduced"] *::after {
+  animation: none !important;
+  transition: none !important;
+  scroll-behavior: auto !important;
 }

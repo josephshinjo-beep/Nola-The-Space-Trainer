@@ -1,13 +1,15 @@
 /**
  * NOLA, the robot companion.
  *
- * NOTE: this is a stand-in drawn from the written brief (white and orange
- * body, cyan glowing eyes). It will be redrawn to match the official NOLA
- * reference image in Milestone 2; every page uses this one component, so
- * only this file needs to change.
+ * An original flat-vector character. It carries over the identity of the
+ * reference artwork (white and orange panels, cyan LED smile-eyes, antenna
+ * with a glowing tip, chest badge, friendly wave) on its own silhouette:
+ * one wide visor and a hover base.
+ *
+ * Every page draws NOLA through this one component.
  */
 
-export type NolaMood = 'happy' | 'curious';
+export type NolaMood = 'happy' | 'curious' | 'excited' | 'thinking';
 
 interface NolaMascotProps {
   mood?: NolaMood;
@@ -15,26 +17,70 @@ interface NolaMascotProps {
   size?: number;
   /** Gently bob up and down. */
   floating?: boolean;
+  /** Raise an arm and wave. */
+  waving?: boolean;
   className?: string;
 }
 
-export function NolaMascot({ mood = 'happy', size = 160, floating = true, className = '' }: NolaMascotProps) {
+const WHITE = '#f4f7ff';
+const SHADE = '#d5dcf2';
+const ORANGE = '#ff7a1a';
+const CYAN = '#3de0f5';
+const DARK = '#26315f';
+const VISOR = '#0b1230';
+
+/** A four-pointed sparkle, like the star in the NOLA logo. */
+function sparkle(cx: number, cy: number, r: number): string {
+  return `M${cx} ${cy - r}Q${cx} ${cy} ${cx + r} ${cy}Q${cx} ${cy} ${cx} ${cy + r}Q${cx} ${cy} ${cx - r} ${cy}Q${cx} ${cy} ${cx} ${cy - r}Z`;
+}
+
+function Eyes({ mood }: { mood: NolaMood }) {
+  const stroke = { fill: 'none', stroke: CYAN, strokeWidth: 9, strokeLinecap: 'round' as const };
+  switch (mood) {
+    case 'curious':
+      return (
+        <g fill={CYAN}>
+          <circle cx="88" cy="88" r="11" />
+          <circle cx="152" cy="86" r="14" />
+        </g>
+      );
+    case 'excited':
+      return (
+        <g {...stroke} strokeWidth={10}>
+          <path d="M70 98 Q88 66 106 98" />
+          <path d="M134 98 Q152 66 170 98" />
+        </g>
+      );
+    case 'thinking':
+      return (
+        <g>
+          <path d="M76 90 H100" {...stroke} />
+          <circle cx="154" cy="84" r="11" fill={CYAN} />
+        </g>
+      );
+    default:
+      return (
+        <g {...stroke}>
+          <path d="M74 96 Q88 74 102 96" />
+          <path d="M138 96 Q152 74 166 96" />
+        </g>
+      );
+  }
+}
+
+export function NolaMascot({ mood = 'happy', size = 160, floating = true, waving = false, className = '' }: NolaMascotProps) {
   return (
     <svg
-      viewBox="0 0 200 230"
+      viewBox="-20 0 280 270"
       width={size}
-      height={(size * 230) / 200}
+      height={(size * 270) / 280}
       role="img"
       aria-label="NOLA, the friendly robot"
       className={`${floating ? 'animate-float' : ''} ${className}`}
     >
       <defs>
-        <radialGradient id="nola-eye" cx="50%" cy="40%" r="60%">
-          <stop offset="0%" stopColor="#d8fbff" />
-          <stop offset="100%" stopColor="#3de0f5" />
-        </radialGradient>
-        <filter id="nola-glow" x="-50%" y="-50%" width="200%" height="200%">
-          <feGaussianBlur stdDeviation="4" result="blur" />
+        <filter id="nola-glow" x="-60%" y="-60%" width="220%" height="220%">
+          <feGaussianBlur stdDeviation="3.5" result="blur" />
           <feMerge>
             <feMergeNode in="blur" />
             <feMergeNode in="SourceGraphic" />
@@ -42,45 +88,83 @@ export function NolaMascot({ mood = 'happy', size = 160, floating = true, classN
         </filter>
       </defs>
 
-      {/* Hover light */}
-      <ellipse cx="100" cy="220" rx="42" ry="7" fill="#3de0f5" opacity="0.25" />
+      {/* Hover light under the base */}
+      <ellipse cx="120" cy="257" rx="60" ry="8" fill={CYAN} opacity="0.28" />
 
       {/* Antenna */}
-      <rect x="96" y="10" width="8" height="26" rx="4" fill="#ff7a1a" />
-      <circle cx="100" cy="11" r="9" fill="#3de0f5" filter="url(#nola-glow)" />
+      <path d="M150 44 L159 16" stroke={DARK} strokeWidth="5" strokeLinecap="round" />
+      <circle cx="160" cy="12" r="7" fill={CYAN} filter="url(#nola-glow)" />
 
-      {/* Ear pods */}
-      <rect x="14" y="70" width="22" height="44" rx="11" fill="#ff7a1a" />
-      <rect x="164" y="70" width="22" height="44" rx="11" fill="#ff7a1a" />
+      {/* Left arm (resting) */}
+      <rect x="38" y="150" width="22" height="54" rx="11" fill={WHITE} />
+      <rect x="38" y="184" width="22" height="10" fill={ORANGE} />
+      <circle cx="49" cy="210" r="10" fill={DARK} />
 
-      {/* Head and visor */}
-      <rect x="28" y="32" width="144" height="118" rx="52" fill="#f4f7ff" />
-      <rect x="44" y="58" width="112" height="66" rx="33" fill="#0f1736" />
-
-      {/* Eyes */}
-      <g filter="url(#nola-glow)" className="animate-blink" style={{ transformOrigin: '100px 90px' }}>
-        {mood === 'happy' ? (
-          <g fill="none" stroke="#3de0f5" strokeWidth="8" strokeLinecap="round">
-            <path d="M64 96 Q76 78 88 96" />
-            <path d="M112 96 Q124 78 136 96" />
+      {/* Right arm: waving or resting */}
+      {waving ? (
+        <g className="animate-wave" style={{ transformOrigin: '191px 158px' }}>
+          <g transform="rotate(24 191 158)">
+            <rect x="180" y="98" width="22" height="66" rx="11" fill={WHITE} />
+            <rect x="180" y="110" width="22" height="10" fill={ORANGE} />
+            <rect x="175" y="72" width="32" height="28" rx="10" fill={DARK} />
+            <rect x="176" y="58" width="8" height="20" rx="4" fill={WHITE} />
+            <rect x="187" y="55" width="8" height="22" rx="4" fill={WHITE} />
+            <rect x="198" y="58" width="8" height="20" rx="4" fill={WHITE} />
           </g>
-        ) : (
-          <g fill="url(#nola-eye)">
-            <circle cx="76" cy="90" r="13" />
-            <circle cx="124" cy="90" r="13" />
-          </g>
-        )}
-      </g>
+        </g>
+      ) : (
+        <g>
+          <rect x="180" y="150" width="22" height="54" rx="11" fill={WHITE} />
+          <rect x="180" y="184" width="22" height="10" fill={ORANGE} />
+          <circle cx="191" cy="210" r="10" fill={DARK} />
+        </g>
+      )}
+
+      {/* Hover base */}
+      <rect x="72" y="212" width="96" height="28" rx="14" fill={DARK} />
+      <rect x="86" y="230" width="68" height="6" rx="3" fill={CYAN} filter="url(#nola-glow)" />
 
       {/* Body */}
-      <path d="M62 158 h76 a22 22 0 0 1 22 22 v6 a26 26 0 0 1 -26 26 h-68 a26 26 0 0 1 -26 -26 v-6 a22 22 0 0 1 22 -22z" fill="#f4f7ff" />
-      <rect x="84" y="150" width="32" height="12" rx="6" fill="#c9d2ee" />
-      <circle cx="100" cy="186" r="13" fill="#ff7a1a" />
-      <circle cx="100" cy="186" r="6" fill="#3de0f5" filter="url(#nola-glow)" />
+      <rect x="60" y="138" width="120" height="86" rx="28" fill={WHITE} />
+      <path d="M60 166 a28 28 0 0 1 28 -28 h8 l-14 22 v40 h-22z" fill={ORANGE} />
+      <path d="M180 166 a28 28 0 0 0 -28 -28 h-8 l14 22 v40 h22z" fill={ORANGE} />
+      <rect x="92" y="154" width="56" height="36" rx="10" fill={VISOR} />
+      <path d="M102 180 Q112 160 136 162" fill="none" stroke={WHITE} strokeWidth="3" strokeLinecap="round" />
+      <path d={sparkle(136, 166, 7)} fill={ORANGE} />
+      <rect x="100" y="200" width="40" height="7" rx="3.5" fill={CYAN} filter="url(#nola-glow)" />
 
-      {/* Arms */}
-      <rect x="20" y="166" width="20" height="38" rx="10" fill="#ff7a1a" />
-      <rect x="160" y="166" width="20" height="38" rx="10" fill="#ff7a1a" />
+      {/* Neck */}
+      <rect x="106" y="124" width="28" height="18" rx="6" fill="#8f9bc4" />
+      <rect x="101" y="130" width="38" height="6" rx="3" fill={ORANGE} />
+
+      {/* Head */}
+      <circle cx="36" cy="86" r="14" fill={ORANGE} />
+      <circle cx="204" cy="86" r="14" fill={ORANGE} />
+      <rect x="36" y="42" width="168" height="88" rx="38" fill={WHITE} />
+      <path d="M74 42 h92 a38 38 0 0 1 14 3 l-8 9 h-104 l-8 -9 a38 38 0 0 1 14 -3z" fill={ORANGE} />
+      <rect x="36" y="112" width="168" height="18" rx="9" fill={SHADE} opacity="0.6" />
+      <rect x="52" y="60" width="136" height="56" rx="26" fill={VISOR} stroke={DARK} strokeWidth="3" />
+
+      {/* Eyes */}
+      <g filter="url(#nola-glow)" className="animate-blink" style={{ transformOrigin: '120px 90px' }}>
+        <Eyes mood={mood} />
+      </g>
+
+      {/* Extra flourishes for some moods */}
+      {mood === 'excited' && (
+        <g fill={ORANGE}>
+          <path d={sparkle(22, 40, 10)} />
+          <path d={sparkle(218, 34, 8)} />
+          <path d={sparkle(226, 118, 6)} fill={CYAN} />
+        </g>
+      )}
+      {mood === 'thinking' && (
+        <g fill={CYAN}>
+          <circle cx="196" cy="30" r="4" />
+          <circle cx="210" cy="20" r="5" />
+          <circle cx="226" cy="8" r="6" />
+        </g>
+      )}
     </svg>
   );
 }

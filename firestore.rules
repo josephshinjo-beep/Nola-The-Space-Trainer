@@ -23,8 +23,10 @@ service cloud.firestore {
       allow create, update: if isOwner(userId) && hasValidProfile();
 
       // Lesson progress, simulation saves, achievements and so on
-      // (added in later milestones) live in sub-collections here.
-      match /{document=**} {
+      // live in sub-collections here. The {collection} segment matters:
+      // a bare /{document=**} would also match the profile itself and
+      // let writes skip the display-name check above.
+      match /{collection}/{document=**} {
         allow read, write: if isOwner(userId);
       }
     }

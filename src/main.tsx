@@ -1,9 +1,14 @@
 import '@fontsource-variable/fredoka';
+import '@fontsource-variable/lexend';
 import '@fontsource-variable/nunito';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
+import { applySettingsToDocument, loadLocalSettings } from './features/accessibility/settings';
 import { missingFirebaseKeys } from './services/firebaseConfig';
+
+// Apply saved accessibility settings before anything is drawn.
+applySettingsToDocument(loadLocalSettings());
 
 const root = createRoot(document.getElementById('root')!);
 

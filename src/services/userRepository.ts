@@ -8,6 +8,8 @@ import {
   type DocumentData,
   type Unsubscribe,
 } from 'firebase/firestore';
+import { sanitizeSettings, type AccessibilitySettings } from '../features/accessibility/settings';
+import { DEFAULT_AVATAR, sanitizeAvatar, type AvatarConfig } from '../features/profile/avatarOptions';
 import type { UserProfile } from '../types/user';
 import { db } from './firebase';
 
@@ -27,6 +29,8 @@ function toUserProfile(data: DocumentData): UserProfile {
   return {
     displayName: typeof data.displayName === 'string' ? data.displayName : 'Cadet',
     createdAt: data.createdAt instanceof Timestamp ? data.createdAt.toDate() : null,
+    avatar: sanitizeAvatar(data.avatar),
+    settings: data.settings ? sanitizeSettings(data.settings) : null,
   };
 }
 
@@ -53,6 +57,7 @@ export function subscribeToUserProfile(uid: string, listeners: ProfileListeners)
 export async function createUserProfile(uid: string, displayName: string): Promise<void> {
   await setDoc(userDoc(uid), {
     displayName,
+    avatar: DEFAULT_AVATAR,
     createdAt: serverTimestamp(),
     updatedAt: serverTimestamp(),
     schemaVersion: PROFILE_SCHEMA_VERSION,
@@ -61,4 +66,12 @@ export async function createUserProfile(uid: string, displayName: string): Promi
 
 export async function updateDisplayName(uid: string, displayName: string): Promise<void> {
   await updateDoc(userDoc(uid), { displayName, updatedAt: serverTimestamp() });
+}
+
+export async function updateAvatar(uid: string, avatar: AvatarConfig): Promise<void> {
+  await updateDoc(userDoc(uid), { avatar, updatedAt: serverTimestamp() });
+}
+
+export async function updateSettings(uid: string, settings: AccessibilitySettings): Promise<void> {
+  await updateDoc(userDoc(uid), { settings, updatedAt: serverTimestamp() });
 }

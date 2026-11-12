@@ -2,6 +2,7 @@ import { LogOut } from 'lucide-react';
 import { NavLink, Outlet } from 'react-router';
 import { Logo } from '../components/Logo';
 import { useAuth } from '../features/auth/AuthContext';
+import { AstronautAvatar } from '../features/profile/AstronautAvatar';
 import { NAV_ITEMS } from './navigation';
 
 /**
@@ -48,8 +49,13 @@ export function AppLayout() {
         </nav>
 
         <div className="rounded-2xl border-2 border-line bg-void/50 p-4">
-          <p className="text-sm text-mist">Signed in as</p>
-          <p className="truncate font-display text-lg font-semibold">{profile?.displayName ?? '…'}</p>
+          <div className="flex items-center gap-3">
+            {profile && <AstronautAvatar avatar={profile.avatar} size={44} className="shrink-0" />}
+            <div className="min-w-0">
+              <p className="text-sm text-mist">Signed in as</p>
+              <p className="truncate font-display text-lg font-semibold">{profile?.displayName ?? '…'}</p>
+            </div>
+          </div>
           <button
             type="button"
             onClick={() => void logout()}

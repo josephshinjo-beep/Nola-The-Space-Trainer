@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Link } from 'react-router';
+import { Link, useLocation } from 'react-router';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
 import { useAuth } from './AuthContext';
@@ -9,6 +9,7 @@ import { validateEmail } from './validation';
 
 export function LoginPage() {
   const { login } = useAuth();
+  const location = useLocation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [emailError, setEmailError] = useState<string | null>(null);
@@ -64,7 +65,7 @@ export function LoginPage() {
         <Link to="/reset-password" className="font-semibold text-glow underline underline-offset-4">
           Forgot your password?
         </Link>
-        <Link to="/register" className="font-semibold text-glow underline underline-offset-4">
+        <Link to="/register" state={location.state} className="font-semibold text-glow underline underline-offset-4">
           New here? Join the crew
         </Link>
       </div>

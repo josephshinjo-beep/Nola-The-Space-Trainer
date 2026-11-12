@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { Link } from 'react-router';
+import { Link, useLocation } from 'react-router';
 import { Button } from '../../components/Button';
 import { TextField } from '../../components/TextField';
 import { useAuth } from './AuthContext';
@@ -15,6 +15,7 @@ interface FieldErrors {
 
 export function RegisterPage() {
   const { register } = useAuth();
+  const location = useLocation();
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -83,7 +84,7 @@ export function RegisterPage() {
       </form>
 
       <p className="mt-6 text-base">
-        <Link to="/login" className="font-semibold text-glow underline underline-offset-4">
+        <Link to="/login" state={location.state} className="font-semibold text-glow underline underline-offset-4">
           Already on the crew? Log in
         </Link>
       </p>

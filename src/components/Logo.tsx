@@ -1,11 +1,11 @@
-/** The NOLA wordmark: an orbit ring with a cyan moon, next to the name. */
+/** The NOLA wordmark: an orbit swoosh ending in an orange star. */
 export function Logo({ className = '' }: { className?: string }) {
   return (
     <span className={`inline-flex items-center gap-3 ${className}`}>
-      <svg viewBox="0 0 48 48" width="40" height="40" aria-hidden="true">
-        <circle cx="24" cy="24" r="11" fill="#ff7a1a" />
-        <ellipse cx="24" cy="24" rx="21" ry="8" fill="none" stroke="#f4f7ff" strokeWidth="2.5" transform="rotate(-24 24 24)" />
-        <circle cx="42" cy="14" r="4" fill="#3de0f5" />
+      <svg viewBox="0 0 48 48" width="42" height="42" aria-hidden="true">
+        <circle cx="22" cy="28" r="12" fill="#18224a" stroke="#3de0f5" strokeWidth="2" />
+        <path d="M3 40 Q10 8 38 9" fill="none" stroke="#f4f7ff" strokeWidth="3" strokeLinecap="round" />
+        <path d="M39 1Q39 9 47 9Q39 9 39 17Q39 9 31 9Q39 9 39 1Z" fill="#ff7a1a" />
       </svg>
       <span className="leading-none">
         <span className="block font-display text-2xl font-bold tracking-wide text-star">NOLA</span>
