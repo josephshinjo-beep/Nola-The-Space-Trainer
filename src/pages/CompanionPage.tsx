@@ -31,7 +31,9 @@ export function CompanionPage() {
   const [draft, setDraft] = useState('');
   const [thinking, setThinking] = useState(false);
   const [knowledge, setKnowledge] = useState<Passage[]>([]);
-  const [station, setStation] = useState<StationState | null>(null);
+  // The saved station, loaded once. Kept as a promise so a question asked
+  // straight away waits for it instead of answering without it.
+  const stationLoad = useRef<Promise<StationState | null>>(Promise.resolve(null));
   const nextId = useRef(1);
   const listEnd = useRef<HTMLDivElement>(null);
 
@@ -42,9 +44,10 @@ export function CompanionPage() {
       .then((passages) => !cancelled && setKnowledge(passages))
       .catch((error) => console.error('Could not load knowledge', error));
     if (user) {
-      loadSimulation(user.uid)
-        .then((saved) => !cancelled && setStation(saved))
-        .catch((error) => console.error('Could not load station', error));
+      stationLoad.current = loadSimulation(user.uid).catch((error) => {
+        console.error('Could not load station', error);
+        return null;
+      });
     }
     return () => {
       cancelled = true;
@@ -62,6 +65,7 @@ export function CompanionPage() {
     const history: ChatTurn[] = messages.slice(1).map((item) => (item.from === 'student' ? { role: 'user', content: item.text } : { role: 'assistant', content: item.reply.text }));
     setMessages((list) => [...list, { id: nextId.current++, from: 'student', text: message }]);
     setThinking(true);
+    const station = await stationLoad.current;
     const reply = await askNola({
       message,
       history,
