@@ -16,6 +16,8 @@ export interface LearnCard {
   text: string;
   icon: LucideIcon;
   fact?: { kind: FactKind; text: string };
+  /** Extra words students might use when asking NOLA about this card. */
+  keywords?: string;
 }
 
 export interface QuizQuestion {

@@ -230,6 +230,17 @@ describe('simulation engine', () => {
     expect(applyAction(s, { type: 'repair', fault: 'co2-filter' }).ok).toBe(false);
   });
 
+  it('keeps a mission repair possible after an emergency recovery clears the fault', () => {
+    let s = createInitialState(['station-access', 'oxygen']);
+    for (const a of [{ type: 'useConsole' }, { type: 'visit', room: 'medical' }, { type: 'heal' }, { type: 'toggleMachine', machine: 'oxygenGenerator' }] as Action[]) s = act(s, a);
+    expect(s.faults).toContain('co2-filter');
+    const recovered = recover({ ...s, status: 'failed', health: 0 });
+    expect(recovered.faults).toContain('co2-filter');
+    expect(currentMission(act(recovered, { type: 'repair', fault: 'co2-filter' }))).toBeNull();
+    // Also if the fault simply went missing from a saved game.
+    expect(step({ ...s, faults: [] }, 5).faults).toContain('co2-filter');
+  });
+
   it('adds new systems to a saved game when more lessons are passed', () => {
     const saved = step(createInitialState(['station-access']), 100);
     const synced = syncUnlocks(saved, ['station-access', 'oxygen']);

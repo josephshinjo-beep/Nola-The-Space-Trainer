@@ -1,5 +1,5 @@
 import { LogOut } from 'lucide-react';
-import { NavLink, Outlet } from 'react-router';
+import { NavLink, Outlet, useLocation } from 'react-router';
 import { Logo } from '../components/Logo';
 import { AcademyProgressProvider } from '../features/academy/AcademyProgressContext';
 import { useAuth } from '../features/auth/AuthContext';
@@ -13,6 +13,8 @@ import { NAV_ITEMS } from './navigation';
  */
 export function AppLayout() {
   const { profile, logout } = useAuth();
+  // The game fills the whole screen; every other page sits in a centred column.
+  const fullScreen = useLocation().pathname === '/mission';
 
   return (
     <div className="lg:flex">
@@ -82,7 +84,11 @@ export function AppLayout() {
           </button>
         </header>
 
-        <main id="main" tabIndex={-1} className="mx-auto max-w-5xl px-4 pb-32 pt-6 outline-none sm:px-8 lg:py-10">
+        <main
+          id="main"
+          tabIndex={-1}
+          className={fullScreen ? 'h-[calc(100dvh-8.75rem)] outline-none lg:h-dvh' : 'mx-auto max-w-5xl px-4 pb-32 pt-6 outline-none sm:px-8 lg:py-10'}
+        >
           <AcademyProgressProvider>
             <Outlet />
           </AcademyProgressProvider>

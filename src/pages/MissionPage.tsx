@@ -1,0 +1,281 @@
+import { Map as MapIcon, Menu } from 'lucide-react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Link } from 'react-router';
+import { Button, buttonClasses } from '../components/Button';
+import { ConfirmDialog, Modal } from '../components/ConfirmDialog';
+import { useSpaceWeather } from '../data/useSpaceWeather';
+import { useAcademyProgress } from '../features/academy/AcademyProgressContext';
+import { CURRICULUM } from '../features/academy/curriculum';
+import { useSettings } from '../features/accessibility/SettingsContext';
+import { useAuth } from '../features/auth/AuthContext';
+import { NolaMascot } from '../features/companion/NolaMascot';
+import { SpeechBubble } from '../features/companion/SpeechBubble';
+import { DEFAULT_AVATAR } from '../features/profile/avatarOptions';
+import { GameBridge, type GameView } from '../game/GameBridge';
+import { EquipmentPanel } from '../game/hud/EquipmentPanel';
+import { InteractButton, Joystick, MissionPanel, NolaCaption, ResourceStrip } from '../game/hud/Hud';
+import { StationMapModal } from '../game/hud/StationMapModal';
+import { EQUIPMENT, findEquipment, findRoom, ROOMS, type EquipmentId } from '../game/stationMap';
+import { useSimulation } from '../game/useSimulation';
+import { DEFAULT_INPUTS, machineStatus } from '../simulation/engine';
+import { currentMission } from '../simulation/missions';
+import type { RoomId, StationState } from '../simulation/types';
+
+// Phaser is large, so it is downloaded only when the game is opened.
+const PhaserGame = lazy(() => import('../game/PhaserGame'));
+
+/** Which machine the next mission task happens at. */
+function missionTarget(state: StationState): EquipmentId | null {
+  const mission = currentMission(state);
+  const task = mission?.tasks.find((candidate) => !state.completedTasks.includes(candidate.id));
+  if (!task) return null;
+  if (task.id === 'visit:medical') return 'medstation';
+  if (task.id === 'shelter') return 'monitor';
+  return EQUIPMENT.find((item) => item.tasks.includes(task.id))?.id ?? null;
+}
+
+function buildView(state: StationState, avatar: GameView['avatar'], reducedMotion: boolean): GameView {
+  const running = machineStatus(state);
+  const on: EquipmentId[] = [];
+  if (running.oxygenGenerator) on.push('generator');
+  if (running.waterRecycler) on.push('recycler');
+  if (running.thermalControl) on.push('thermostat');
+  if (running.cropGrowing) on.push('growbed');
+  if (state.panelsDeployed) on.push('solar');
+  return {
+    lockedRooms: ROOMS.filter((room) => !state.unlocked.includes(room.system)).map((room) => room.id),
+    alerts: EQUIPMENT.filter((item) => item.faults.some((fault) => state.faults.includes(fault))).map((item) => item.id),
+    target: missionTarget(state),
+    running: on,
+    cropStage: state.crop.stage,
+    storm: state.storm !== null,
+    avatar,
+    reducedMotion,
+  };
+}
+
+function StationGame() {
+  const { user, profile } = useAuth();
+  const { unlockedSystems } = useAcademyProgress();
+  const { settings } = useSettings();
+  const weather = useSpaceWeather();
+  const bridge = useMemo(() => new GameBridge(), []);
+
+  const [room, setRoom] = useState<RoomId | null>(null);
+  const [nearby, setNearby] = useState<EquipmentId | null>(null);
+  const [openEquipment, setOpenEquipment] = useState<EquipmentId | null>(null);
+  const [mapOpen, setMapOpen] = useState(false);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const [confirmRestart, setConfirmRestart] = useState(false);
+
+  const roomRef = useRef<RoomId | null>(null);
+  const weatherInputs = weather.summary?.inputs ?? DEFAULT_INPUTS.spaceWeather;
+  const sim = useSimulation(user?.uid, unlockedSystems, () => ({ inShelter: roomRef.current === 'shelter', spaceWeather: weatherInputs }));
+  const { state, dispatch, setPaused } = sim;
+
+  // What the player does in the game world.
+  useEffect(() => {
+    const stop = [
+      bridge.on('room', (next) => {
+        roomRef.current = next;
+        setRoom(next);
+        dispatch({ type: 'visit', room: next });
+      }),
+      bridge.on('nearby', setNearby),
+      bridge.on('interact', setOpenEquipment),
+    ];
+    return () => stop.forEach((off) => off());
+  }, [bridge, dispatch]);
+
+  // The clock and the astronaut both stop while a panel or menu is open.
+  const paused = openEquipment !== null || mapOpen || menuOpen || confirmRestart || state?.status === 'failed';
+  useEffect(() => {
+    bridge.paused = paused;
+    setPaused(paused);
+  }, [bridge, paused, setPaused]);
+
+  // Tell the game what to draw, but only when something visible changed.
+  const avatar = profile?.avatar ?? DEFAULT_AVATAR;
+  const view = state ? buildView(state, avatar, settings.reduceMotion) : null;
+  const viewKey = view ? JSON.stringify(view) : '';
+  useEffect(() => {
+    if (viewKey) bridge.setView(JSON.parse(viewKey) as GameView);
+  }, [bridge, viewKey]);
+
+  const closePanel = useCallback(() => setOpenEquipment(null), []);
+
+  if (sim.loadError) {
+    return (
+      <div className="p-6">
+        <p role="alert" className="rounded-2xl border-2 border-alert bg-alert/10 p-4 text-lg font-semibold text-alert">
+          We couldn't load your station. Check your connection and refresh the page.
+        </p>
+      </div>
+    );
+  }
+  if (!state) {
+    return (
+      <p role="status" className="p-6 text-xl text-mist">
+        Powering up your station…
+      </p>
+    );
+  }
+
+  const nearbyName = nearby ? findEquipment(nearby).name : null;
+  const lowest = (['oxygen', 'water', 'food'] as const).filter((id) => state.unlocked.includes(id)).sort((a, b) => state.resources[a] - state.resources[b])[0];
+
+  return (
+    <div className="relative h-full overflow-hidden bg-void">
+      <Suspense
+        fallback={
+          <p role="status" className="p-6 text-xl text-mist">
+            Loading the station…
+          </p>
+        }
+      >
+        <PhaserGame bridge={bridge} />
+      </Suspense>
+
+      {/* Everything below floats over the game. Only the controls catch clicks. */}
+      <div className="pointer-events-none absolute inset-0 flex flex-col gap-2 p-2 sm:p-3">
+        <h1 className="sr-only">NOLA Mission: your space station</h1>
+        <ResourceStrip state={state} />
+
+        <div className="flex items-start justify-between gap-2">
+          <MissionPanel state={state} />
+          <div className="flex flex-col gap-2">
+            <button type="button" onClick={() => setMapOpen(true)} className="pointer-events-auto flex h-12 items-center gap-2 rounded-full border-2 border-line bg-hull/90 px-4 font-bold">
+              <MapIcon aria-hidden="true" size={20} /> Map
+            </button>
+            <button type="button" onClick={() => setMenuOpen(true)} className="pointer-events-auto flex h-12 items-center gap-2 rounded-full border-2 border-line bg-hull/90 px-4 font-bold">
+              <Menu aria-hidden="true" size={20} /> Menu
+            </button>
+          </div>
+        </div>
+
+        <div className="flex-1" />
+
+        <p className="pointer-events-auto w-fit rounded-full bg-hull/90 px-3 py-1 text-sm font-bold" aria-live="polite">
+          {room ? findRoom(room).name : 'Station'}
+          {nearbyName ? ` · Near: ${nearbyName}` : ''}
+        </p>
+        <div className="flex justify-center sm:hidden">
+          <NolaCaption state={state} />
+        </div>
+        <div className="flex items-end justify-between gap-2">
+          <div className="[@media(pointer:fine)]:hidden">
+            <Joystick bridge={bridge} />
+          </div>
+          <div className="hidden text-sm font-bold text-mist [@media(pointer:fine)]:block">
+            <p className="pointer-events-auto rounded-xl bg-hull/90 px-3 py-2">Move: WASD or arrow keys · Use: E</p>
+          </div>
+          <div className="hidden min-w-0 flex-1 justify-center sm:flex">
+            <NolaCaption state={state} />
+          </div>
+          <InteractButton label={nearbyName} onPress={() => nearby && setOpenEquipment(nearby)} />
+        </div>
+
+        {sim.saveError && (
+          <p role="alert" className="pointer-events-auto rounded-xl border-2 border-alert bg-hull px-3 py-1 text-sm font-semibold text-alert">
+            Saving is not working right now. Your progress will be saved when the connection returns.
+          </p>
+        )}
+      </div>
+
+      {openEquipment && <EquipmentPanel id={openEquipment} state={state} dispatch={dispatch} weather={weather} onClose={closePanel} />}
+
+      <StationMapModal
+        open={mapOpen}
+        state={state}
+        currentRoom={room}
+        onClose={() => setMapOpen(false)}
+        onTravel={(id) => {
+          bridge.travelTo = id;
+          setMapOpen(false);
+        }}
+      />
+
+      <Modal open={menuOpen} title="Game paused" onClose={() => setMenuOpen(false)}>
+        <p className="mb-5 text-lg text-mist">Your station is saved automatically. Time stands still while you are away.</p>
+        <div className="flex flex-col gap-3">
+          <Button onClick={() => setMenuOpen(false)}>Back to the station</Button>
+          <Link to="/profile" className={buttonClasses('secondary')}>
+            Accessibility settings
+          </Link>
+          <Button
+            variant="secondary"
+            onClick={() => {
+              setMenuOpen(false);
+              setConfirmRestart(true);
+            }}
+          >
+            Restart the station
+          </Button>
+          <Link to="/" className={buttonClasses('secondary')} onClick={sim.saveNow}>
+            Save and exit to Mission Control
+          </Link>
+        </div>
+      </Modal>
+
+      <ConfirmDialog
+        open={confirmRestart}
+        title="Restart your station?"
+        message="Your station will go back to day one and your missions will start again. Your Academy lessons stay completed."
+        confirmLabel="Restart station"
+        onConfirm={() => {
+          setConfirmRestart(false);
+          void sim.restart();
+        }}
+        onCancel={() => setConfirmRestart(false)}
+      />
+
+      <Modal open={state.status === 'failed'} title="Emergency recovery" onClose={sim.recoverStation}>
+        <div className="flex flex-col items-center gap-4 text-center">
+          <NolaMascot mood="curious" size={120} />
+          <p className="text-lg">
+            The crew became too unwell to carry on, so I stepped in and stabilised the station.
+            {lowest && state.resources[lowest] < 25 ? ` It looks like ${lowest} ran too low.` : ''} Every astronaut has tough days. That is how they learn!
+          </p>
+          <p className="text-mist">Your missions and progress are safe.</p>
+          <Button onClick={sim.recoverStation}>Try again</Button>
+        </div>
+      </Modal>
+    </div>
+  );
+}
+
+/** The Mission page: the station game, or a friendly locked screen before Module 1 is passed. */
+export default function MissionPage() {
+  const { loaded, unlockedSystems } = useAcademyProgress();
+  const first = CURRICULUM[0];
+
+  if (!loaded) {
+    return (
+      <p role="status" className="p-6 text-xl text-mist">
+        Checking your training record…
+      </p>
+    );
+  }
+
+  if (!unlockedSystems.includes('station-access')) {
+    const message = `The station airlock is still sealed! Pass Module 1, ${first?.title}, and I'll open it for you.`;
+    return (
+      <div className="mx-auto max-w-3xl space-y-8 p-4 sm:p-8">
+        <h1 className="text-3xl font-semibold sm:text-4xl">NOLA Mission</h1>
+        <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-start">
+          <NolaMascot mood="curious" size={150} className="shrink-0" />
+          <SpeechBubble className="flex-1" readAloudText={message}>
+            {message}
+          </SpeechBubble>
+        </div>
+        {first && (
+          <Link to={`/academy/${first.id}`} className={buttonClasses('primary')}>
+            Go to Module 1
+          </Link>
+        )}
+      </div>
+    );
+  }
+
+  return <StationGame />;
+}

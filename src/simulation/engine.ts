@@ -213,12 +213,15 @@ function prepareMission(state: StationState): void {
   const mission = currentMission(state);
   if (!mission) return;
   const task = mission.tasks.find((candidate) => !state.completedTasks.includes(candidate.id));
-  if (!task || state.triggered.includes(task.id)) return;
-  if (task.needsFault && !hasFault(state, task.needsFault)) {
-    state.triggered.push(task.id);
-    state.faults.push(task.needsFault);
-    addLog(state, FAULT_INFO[task.needsFault].alert, 'warn');
-  } else if (task.needsStorm && !state.storm) {
+  if (!task) return;
+  if (task.needsFault) {
+    // The fault must exist for as long as the task is open, even if something
+    // else (such as an emergency recovery) cleared it in the meantime.
+    if (!hasFault(state, task.needsFault)) {
+      state.faults.push(task.needsFault);
+      addLog(state, FAULT_INFO[task.needsFault].alert, 'warn');
+    }
+  } else if (task.needsStorm && !state.storm && !state.triggered.includes(task.id)) {
     state.triggered.push(task.id);
     startStorm(state, 1, SIM.stormMinMinutes);
   }
@@ -477,6 +480,9 @@ export function recover(state: StationState): StationState {
   next.storm = null;
   next.radiation = SIM.backgroundRadiation;
   next.nextEventAt = next.minutes + SIM.firstEventAfterMinutes;
+  // Let a mission storm that was cut short happen again later.
+  next.triggered = [];
   addLog(next, 'Emergency recovery complete. The station is stable. You can do this!', 'info');
+  prepareMission(next);
   return next;
 }

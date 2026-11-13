@@ -23,6 +23,7 @@ export const lesson: Lesson = {
     {
       title: 'How does an oxygen supply system work?',
       icon: FlaskConical,
+      keywords: 'make made get oxygen electrolysis generator air',
       text: 'The station makes oxygen by electrolysis. Electricity from the solar panels splits water into its two parts: oxygen, which the crew breathes, and hydrogen, which is removed. So making air uses both water and power.',
       fact: { kind: 'today', text: 'The ISS Oxygen Generation System works this way right now.' },
     },

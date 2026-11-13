@@ -1,3 +1,4 @@
+import { lazy, Suspense } from 'react';
 import { BrowserRouter, Route, Routes } from 'react-router';
 import { SettingsProvider } from '../features/accessibility/SettingsContext';
 import { AuthProvider } from '../features/auth/AuthContext';
@@ -12,9 +13,10 @@ import { ModulePage } from '../pages/ModulePage';
 import { LessonPage } from '../pages/LessonPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
 import { ProfilePage } from '../pages/ProfilePage';
-import { UnderConstructionPage } from '../pages/UnderConstructionPage';
 import { AppLayout } from './AppLayout';
 import { ProtectedRoute, PublicOnlyRoute } from './RouteGuards';
+
+const MissionPage = lazy(() => import('../pages/MissionPage'));
 
 /** The route map: which page shows at which address, and who may see it. */
 export default function App() {
@@ -38,15 +40,9 @@ export default function App() {
                 <Route
                   path="/mission"
                   element={
-                    <UnderConstructionPage
-                      title="NOLA Mission"
-                      message="The station is still being bolted together. When it's ready, you'll walk around it and keep the crew alive!"
-                      planned={[
-                        'A space station to explore',
-                        'Food, oxygen, energy and water to manage',
-                        'Missions and mini-games',
-                      ]}
-                    />
+                    <Suspense fallback={<p className="p-6 text-xl text-mist">Loading…</p>}>
+                      <MissionPage />
+                    </Suspense>
                   }
                 />
                 <Route path="/companion" element={<CompanionPage />} />

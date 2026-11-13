@@ -23,6 +23,7 @@ export const lesson: Lesson = {
     {
       title: 'What is microgravity?',
       icon: Feather,
+      keywords: 'float floating weightless weightlessness zero gravity orbit',
       text: "Astronauts float, but not because gravity is gone. At the height of the space station, gravity is still about 90% as strong as on the ground! The station is constantly falling around the Earth, and everything inside falls with it. That endless fall feels like floating.",
       fact: { kind: 'today', text: 'Falling around a planet without hitting it is called being in orbit.' },
     },

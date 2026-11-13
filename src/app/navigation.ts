@@ -14,6 +14,6 @@ export const NAV_ITEMS: NavItem[] = [
   { to: '/', label: 'Mission Control', shortLabel: 'Control', icon: LayoutDashboard },
   { to: '/academy', label: 'NOLA Academy', shortLabel: 'Academy', icon: GraduationCap },
   { to: '/mission', label: 'NOLA Mission', shortLabel: 'Mission', icon: Rocket },
-  { to: '/companion', label: 'Meet NOLA', shortLabel: 'NOLA', icon: Bot },
+  { to: '/companion', label: 'Ask NOLA', shortLabel: 'NOLA', icon: Bot },
   { to: '/profile', label: 'Astronaut Profile', shortLabel: 'Profile', icon: UserRound },
 ];

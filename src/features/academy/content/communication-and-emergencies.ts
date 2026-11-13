@@ -26,6 +26,7 @@ export const lesson: Lesson = {
     {
       title: 'Why can messages be delayed?',
       icon: Timer,
+      keywords: 'how long message signal take reach mars moon delay speed light',
       text: 'Radio waves travel at the speed of light: about 300,000 km every second. That is fast, but space is huge. A signal takes about 1.3 seconds to reach the Moon and between 3 and 22 minutes to reach Mars, depending on where the planets are.',
     },
     {

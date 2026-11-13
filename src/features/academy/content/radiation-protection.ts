@@ -38,6 +38,7 @@ export const lesson: Lesson = {
     {
       title: 'Why are protective materials and shelters important?',
       icon: Tent,
+      keywords: 'solar storm shelter flare',
       text: 'Solar storms are intense but short, lasting hours to a few days. Crews wait them out in the best-shielded part of the craft, often surrounded by water and supplies. Future Moon and Mars bases might be covered with a thick layer of local soil.',
       fact: { kind: 'future', text: 'Building bases under metres of soil, or inside old lava tunnels, is a future habitat concept.' },
     },
