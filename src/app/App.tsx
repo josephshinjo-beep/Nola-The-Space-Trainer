@@ -9,6 +9,7 @@ import { AccessibilityPage } from '../pages/AccessibilityPage';
 import { CompanionPage } from '../pages/CompanionPage';
 import { MissionControlPage } from '../pages/MissionControlPage';
 import { ModulePage } from '../pages/ModulePage';
+import { LessonPage } from '../pages/LessonPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
 import { ProfilePage } from '../pages/ProfilePage';
 import { UnderConstructionPage } from '../pages/UnderConstructionPage';
@@ -33,6 +34,7 @@ export default function App() {
                 <Route index element={<MissionControlPage />} />
                 <Route path="/academy" element={<AcademyPage />} />
                 <Route path="/academy/:moduleId" element={<ModulePage />} />
+                <Route path="/academy/:moduleId/lesson" element={<LessonPage />} />
                 <Route
                   path="/mission"
                   element={

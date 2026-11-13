@@ -1,6 +1,7 @@
 import { LogOut } from 'lucide-react';
 import { NavLink, Outlet } from 'react-router';
 import { Logo } from '../components/Logo';
+import { AcademyProgressProvider } from '../features/academy/AcademyProgressContext';
 import { useAuth } from '../features/auth/AuthContext';
 import { AstronautAvatar } from '../features/profile/AstronautAvatar';
 import { NAV_ITEMS } from './navigation';
@@ -82,7 +83,9 @@ export function AppLayout() {
         </header>
 
         <main id="main" tabIndex={-1} className="mx-auto max-w-5xl px-4 pb-32 pt-6 outline-none sm:px-8 lg:py-10">
-          <Outlet />
+          <AcademyProgressProvider>
+            <Outlet />
+          </AcademyProgressProvider>
         </main>
       </div>
 

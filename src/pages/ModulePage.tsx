@@ -1,14 +1,20 @@
-import { ArrowLeft, ArrowRight, Hammer, KeyRound } from 'lucide-react';
+import { ArrowLeft, ArrowRight, Check, KeyRound, Lock, RotateCcw } from 'lucide-react';
+import { useState } from 'react';
 import { Link, useParams } from 'react-router';
-import { buttonClasses } from '../components/Button';
+import { Button, buttonClasses } from '../components/Button';
+import { ConfirmDialog } from '../components/ConfirmDialog';
+import { useAcademyProgress } from '../features/academy/AcademyProgressContext';
 import { CURRICULUM, LESSON_STAGES, findModule } from '../features/academy/curriculum';
+import { moduleStatus } from '../features/academy/progress';
 import { NolaMascot } from '../features/companion/NolaMascot';
 import { SpeechBubble } from '../features/companion/SpeechBubble';
 
-/** Preview of one Academy module: what it covers and what it unlocks. */
+/** One Academy module: what it covers, your progress, and the way into the lesson. */
 export function ModulePage() {
   const { moduleId } = useParams();
   const module = findModule(moduleId);
+  const { progress, resetModule } = useAcademyProgress();
+  const [confirmRestart, setConfirmRestart] = useState(false);
 
   if (!module) {
     return (
@@ -23,7 +29,11 @@ export function ModulePage() {
   }
 
   const Icon = module.icon;
+  const status = moduleStatus(module, progress);
+  const record = progress[module.id];
+  const previous = CURRICULUM.find((candidate) => candidate.number === module.number - 1);
   const next = CURRICULUM.find((candidate) => candidate.number === module.number + 1);
+  const startLabel = status === 'completed' ? 'Review the lesson' : status === 'in-progress' ? 'Continue the lesson' : 'Start the lesson';
 
   return (
     <div className="animate-rise space-y-8">
@@ -40,16 +50,52 @@ export function ModulePage() {
       </header>
 
       <div className="flex flex-col items-center gap-6 sm:flex-row sm:items-start">
-        <NolaMascot mood="curious" size={130} className="shrink-0" />
+        <NolaMascot mood={status === 'completed' ? 'excited' : 'curious'} size={130} className="shrink-0" />
         <SpeechBubble className="flex-1" readAloudText={module.nolaIntro}>
           {module.nolaIntro}
         </SpeechBubble>
       </div>
 
-      <p className="flex items-start gap-3 rounded-2xl border-2 border-nola-soft bg-nola/10 px-4 py-3 text-lg font-semibold text-nola-soft">
-        <Hammer aria-hidden="true" size={22} className="mt-1 shrink-0" />
-        The lessons for this module are still being written. This page shows what they will cover.
-      </p>
+      <section className="rounded-3xl border-2 border-nola bg-hull/80 p-6">
+        {status === 'locked' ? (
+          <p className="flex items-start gap-3 text-lg font-semibold">
+            <Lock aria-hidden="true" size={22} className="mt-1 shrink-0 text-mist" />
+            <span>
+              This module is locked. Complete{' '}
+              {previous && (
+                <Link to={`/academy/${previous.id}`} className="text-glow underline underline-offset-4">
+                  Module {previous.number}: {previous.title}
+                </Link>
+              )}{' '}
+              first.
+            </span>
+          </p>
+        ) : (
+          <div className="flex flex-wrap items-center justify-between gap-4">
+            <div>
+              <p className="inline-flex items-center gap-2 font-display text-xl font-semibold">
+                {status === 'completed' && <Check aria-hidden="true" size={22} className="text-go" />}
+                {status === 'completed' ? 'Completed' : status === 'in-progress' ? `In progress: ${LESSON_STAGES[Math.min(record?.stage ?? 0, 5)]?.name}` : 'Ready when you are'}
+              </p>
+              {record?.bestScore != null && record.quizTotal != null && (
+                <p className="mt-1 text-mist">
+                  Best quiz score: {record.bestScore} out of {record.quizTotal} · Attempts: {record.attempts}
+                </p>
+              )}
+            </div>
+            <div className="flex flex-wrap gap-3">
+              <Link to={`/academy/${module.id}/lesson`} className={buttonClasses('primary')}>
+                {startLabel} <ArrowRight aria-hidden="true" size={20} />
+              </Link>
+              {status === 'in-progress' && (
+                <Button variant="secondary" onClick={() => setConfirmRestart(true)}>
+                  <RotateCcw aria-hidden="true" size={18} /> Start again
+                </Button>
+              )}
+            </div>
+          </div>
+        )}
+      </section>
 
       <div className="grid gap-6 lg:grid-cols-2">
         <section className="rounded-3xl border-2 border-line bg-hull/80 p-6">
@@ -68,14 +114,11 @@ export function ModulePage() {
 
         <div className="space-y-6">
           <section className="rounded-3xl border-2 border-line bg-hull/80 p-6">
-            <h2 className="text-xl font-semibold">How each lesson works</h2>
+            <h2 className="text-xl font-semibold">How the lesson works</h2>
             <ol className="mt-4 space-y-3">
               {LESSON_STAGES.map((stage, index) => (
                 <li key={stage.name} className="flex gap-3">
-                  <span
-                    aria-hidden="true"
-                    className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-panel font-display font-bold text-glow"
-                  >
+                  <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-panel font-display font-bold text-glow">
                     {index + 1}
                   </span>
                   <span>
@@ -87,13 +130,14 @@ export function ModulePage() {
             </ol>
           </section>
 
-          <section className="rounded-3xl border-2 border-nola bg-hull/80 p-6">
+          <section className="rounded-3xl border-2 border-line bg-hull/80 p-6">
             <h2 className="flex items-center gap-2 text-xl font-semibold">
               <KeyRound aria-hidden="true" size={22} className="text-nola" />
               Station unlock: {module.unlock.name}
             </h2>
             <p className="mt-2 text-lg text-mist">
-              Pass this module's knowledge check and you'll be able to: {module.unlock.description.toLowerCase()}
+              {status === 'completed' ? 'Unlocked! On your station you can now: ' : "Pass this module and you'll be able to: "}
+              {module.unlock.description.toLowerCase()}
             </p>
           </section>
         </div>
@@ -104,6 +148,18 @@ export function ModulePage() {
           Next: {next.title} <ArrowRight aria-hidden="true" size={18} />
         </Link>
       )}
+
+      <ConfirmDialog
+        open={confirmRestart}
+        title="Start this lesson again?"
+        message="Your place in this lesson and its quiz scores will be cleared. Other modules are not affected."
+        confirmLabel="Start again"
+        onConfirm={() => {
+          setConfirmRestart(false);
+          void resetModule(module.id);
+        }}
+        onCancel={() => setConfirmRestart(false)}
+      />
     </div>
   );
 }

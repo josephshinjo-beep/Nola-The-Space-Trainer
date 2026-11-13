@@ -1,8 +1,9 @@
-import { ArrowRight, Check, Lock, Palette } from 'lucide-react';
+import { ArrowRight, Check, Lock, Palette, Rocket } from 'lucide-react';
 import { Link } from 'react-router';
 import { buttonClasses } from '../components/Button';
 import { CURRICULUM } from '../features/academy/curriculum';
-import { useAcademyProgress } from '../features/academy/useAcademyProgress';
+import { useAcademyProgress } from '../features/academy/AcademyProgressContext';
+import { moduleStatus } from '../features/academy/progress';
 import { useAuth } from '../features/auth/AuthContext';
 import { NolaMascot } from '../features/companion/NolaMascot';
 import { SpeechBubble } from '../features/companion/SpeechBubble';
@@ -18,16 +19,21 @@ function timeOfDayGreeting(): string {
 
 export function MissionControlPage() {
   const { profile, profileError } = useAuth();
-  const { completedModuleIds } = useAcademyProgress();
+  const { progress, completedModuleIds } = useAcademyProgress();
 
   const name = profile?.displayName;
   const greeting = name ? `${timeOfDayGreeting()}, ${name}!` : `${timeOfDayGreeting()}!`;
-  const message =
-    'Welcome to Mission Control. Your station is waiting, but its systems are switched off. Each Academy module you pass will bring one online.';
 
   const total = CURRICULUM.length;
   const completed = CURRICULUM.filter((module) => completedModuleIds.includes(module.id)).length;
   const nextModule = CURRICULUM.find((module) => !completedModuleIds.includes(module.id));
+  const inProgress = nextModule ? moduleStatus(nextModule, progress) === 'in-progress' : false;
+  const message =
+    completed === 0
+      ? 'Welcome to Mission Control. Your station is waiting, but its systems are switched off. Each Academy module you pass will bring one online.'
+      : nextModule
+        ? `You have brought ${completed} of ${total} station systems online. Next up in the Academy: ${nextModule.title}.`
+        : 'Every station system is online and you are an Academy graduate. Your station needs its commander!';
 
   return (
     <div className="space-y-10">
@@ -90,9 +96,22 @@ export function MissionControlPage() {
               <p className="text-mist">{nextModule.tagline}</p>
             </div>
           )}
-          <Link to="/academy" className={buttonClasses('primary', 'mt-5')}>
-            See the training path <ArrowRight aria-hidden="true" size={20} />
-          </Link>
+          <div className="mt-5 flex flex-wrap gap-3">
+            {nextModule ? (
+              <Link to={`/academy/${nextModule.id}/lesson`} className={buttonClasses('primary')}>
+                {inProgress ? 'Continue learning' : 'Start learning'} <ArrowRight aria-hidden="true" size={20} />
+              </Link>
+            ) : (
+              <Link to="/academy" className={buttonClasses('primary')}>
+                Review your lessons <ArrowRight aria-hidden="true" size={20} />
+              </Link>
+            )}
+            {completed > 0 && (
+              <Link to="/mission" className={buttonClasses('secondary')}>
+                <Rocket aria-hidden="true" size={20} /> Go to your station
+              </Link>
+            )}
+          </div>
         </section>
       </div>
 

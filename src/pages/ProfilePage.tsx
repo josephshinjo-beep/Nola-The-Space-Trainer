@@ -1,5 +1,6 @@
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { Button } from '../components/Button';
+import { ConfirmDialog } from '../components/ConfirmDialog';
 import { TextField } from '../components/TextField';
 import { SettingsPanel } from '../features/accessibility/SettingsPanel';
 import { useAuth } from '../features/auth/AuthContext';
@@ -7,7 +8,14 @@ import { validateDisplayName } from '../features/auth/validation';
 import { AstronautAvatar } from '../features/profile/AstronautAvatar';
 import { AvatarEditor } from '../features/profile/AvatarEditor';
 import { DEFAULT_AVATAR } from '../features/profile/avatarOptions';
+import { AchievementsPanel, LearningHistoryPanel } from '../features/profile/ProgressPanels';
+import type { StationStats } from '../features/academy/achievements';
+import { useAcademyProgress } from '../features/academy/AcademyProgressContext';
+import { getStationStats } from '../simulation/engine';
+import { deleteSimulation, loadSimulation } from '../services/simulationRepository';
 import { updateDisplayName } from '../services/userRepository';
+
+type Confirming = 'course' | 'station' | null;
 
 const dateFormat = new Intl.DateTimeFormat(undefined, { dateStyle: 'long' });
 
@@ -25,6 +33,45 @@ export function ProfilePage() {
   const [name, setName] = useState('');
   const [nameError, setNameError] = useState<string | null>(null);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
+
+  const { resetCourse, completedModuleIds } = useAcademyProgress();
+  const [station, setStation] = useState<StationStats | null>(null);
+  const [hasSave, setHasSave] = useState(false);
+  const [confirming, setConfirming] = useState<Confirming>(null);
+  const [resetMessage, setResetMessage] = useState<string | null>(null);
+
+  // Read the saved station game once, for achievements and the restart option.
+  const uid = user?.uid;
+  useEffect(() => {
+    if (!uid) return;
+    let cancelled = false;
+    loadSimulation(uid)
+      .then((saved) => {
+        if (cancelled) return;
+        setStation(saved ? getStationStats(saved) : null);
+        setHasSave(saved !== null);
+      })
+      .catch((error) => console.error('Could not load station save', error));
+    return () => {
+      cancelled = true;
+    };
+  }, [uid]);
+
+  async function handleReset(what: Exclude<Confirming, null>) {
+    setConfirming(null);
+    if (!uid) return;
+    try {
+      // Restarting the course also restarts the station, because its systems are earned by lessons.
+      await deleteSimulation(uid);
+      setStation(null);
+      setHasSave(false);
+      if (what === 'course') await resetCourse();
+      setResetMessage(what === 'course' ? 'Your course and station have been reset. A fresh start!' : 'Your station has been reset. Your lessons are untouched.');
+    } catch (error) {
+      console.error('Reset failed', error);
+      setResetMessage("That didn't work. Check your connection and try again.");
+    }
+  }
 
   // Fill the form once the saved profile arrives.
   const savedName = profile?.displayName;
@@ -118,13 +165,53 @@ export function ProfilePage() {
         </p>
       </Panel>
 
+      <Panel title="Achievements">
+        <AchievementsPanel station={station} />
+      </Panel>
+
+      <Panel title="Learning history">
+        <LearningHistoryPanel />
+      </Panel>
+
       <Panel title="Accessibility">
         <SettingsPanel />
+      </Panel>
+
+      <Panel title="Start again">
+        <p className="mb-4 text-lg text-mist">These cannot be undone, so you will be asked to confirm.</p>
+        <div className="flex flex-wrap gap-3">
+          <Button variant="secondary" disabled={!hasSave} onClick={() => setConfirming('station')}>
+            Restart my station
+          </Button>
+          <Button variant="secondary" disabled={completedModuleIds.length === 0 && !hasSave} onClick={() => setConfirming('course')}>
+            Restart the whole course
+          </Button>
+        </div>
+        <p role="status" className="mt-3 min-h-6 font-semibold text-go">
+          {resetMessage}
+        </p>
       </Panel>
 
       <Button variant="secondary" onClick={() => void logout()}>
         Log out
       </Button>
+
+      <ConfirmDialog
+        open={confirming === 'station'}
+        title="Restart your station?"
+        message="Your saved station game, missions and station achievements will be erased. Your Academy lessons stay completed."
+        confirmLabel="Restart station"
+        onConfirm={() => void handleReset('station')}
+        onCancel={() => setConfirming(null)}
+      />
+      <ConfirmDialog
+        open={confirming === 'course'}
+        title="Restart the whole course?"
+        message="All lesson progress, quiz scores and achievements will be erased, and your station will be reset and locked again. Your astronaut and settings are kept."
+        confirmLabel="Restart everything"
+        onConfirm={() => void handleReset('course')}
+        onCancel={() => setConfirming(null)}
+      />
     </div>
   );
 }
