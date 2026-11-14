@@ -1,4 +1,4 @@
-import { Map as MapIcon, Menu } from 'lucide-react';
+import { Box, Map as MapIcon, Menu } from 'lucide-react';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { Button, buttonClasses } from '../components/Button';
@@ -282,6 +282,9 @@ function StationGame() {
             <button type="button" onClick={() => setMenuOpen(true)} className="pointer-events-auto flex h-12 items-center gap-2 rounded-full border-2 border-line bg-hull/90 px-4 font-bold">
               <Menu aria-hidden="true" size={20} /> Menu
             </button>
+            <Link to="/mission3d" onClick={sim.saveNow} className="pointer-events-auto flex h-12 items-center gap-2 rounded-full border-2 border-glow bg-hull/90 px-4 font-bold">
+              <Box aria-hidden="true" size={20} /> 3D view
+            </Link>
           </div>
         </div>
 
