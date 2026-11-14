@@ -72,6 +72,10 @@ export function describeContext(context: CompanionContext): string {
   return lines.join(' ');
 }
 
+/** The one reply to anything that is not about space, NASA, the lessons or the app. Keep in step with api/chat.ts. */
+export const OFF_TOPIC_REPLY =
+  "I can only help with space! Please ask me a question about space, NASA, your NOLA Academy lessons, or how to use this app and your station.";
+
 export const SUGGESTED_QUESTIONS = [
   'Why do astronauts float?',
   'How do astronauts get oxygen?',
@@ -121,5 +125,5 @@ export function builtInReply(message: string, hits: readonly SearchHit[], contex
   if (GREETING.test(text)) return reply("Hello, cadet! I'm NOLA. Ask me anything about living in space, or say \"What should I do next?\" for a hint.", 'excited');
   if (THANKS.test(text)) return reply("You're welcome! Asking questions is exactly what good astronauts do.", 'excited');
 
-  return reply(`I'm a space-training robot, so I don't have a good answer for that one. Try asking me about space survival, like "${SUGGESTED_QUESTIONS[1]}" or "${SUGGESTED_QUESTIONS[3]}"`, 'thinking');
+  return reply(OFF_TOPIC_REPLY, 'thinking');
 }

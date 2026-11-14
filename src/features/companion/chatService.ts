@@ -59,9 +59,10 @@ export async function askNola({ message, history, hits, context, getToken }: Ask
     }
     if (!response.ok) return fallback;
 
-    const data = (await response.json()) as { answer?: unknown };
+    const data = (await response.json()) as { answer?: unknown; offTopic?: unknown };
     if (typeof data.answer !== 'string' || !data.answer.trim()) return fallback;
     aiAvailable = true;
+    if (data.offTopic === true) return { text: data.answer.trim(), mood: 'thinking', sources: [], origin: 'ai' };
     return { text: data.answer.trim(), mood: 'happy', sources: hits.slice(0, 2).map((hit) => hit.passage.source), origin: 'ai' };
   } catch (error) {
     console.warn('AI chat unavailable, using built-in answers.', error);

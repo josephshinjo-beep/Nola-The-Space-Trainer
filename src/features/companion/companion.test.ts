@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { buildUserTurn, parseChatRequest, POST } from '../../../api/chat';
+import { askGemini, buildUserTurn, GeminiError, OFF_TOPIC_REPLY as SERVER_OFF_TOPIC_REPLY, parseChatRequest, POST, type ChatRequest } from '../../../api/chat';
 import { GET, normalizeDonki } from '../../../api/space-weather';
 import { FallbackProvider, MockSpaceDataProvider, NasaDonkiProvider } from '../../data/providers';
 import { geomagneticScale, radioBlackoutScale, summarizeSpaceWeather } from '../../data/spaceWeatherModel';
@@ -10,7 +10,7 @@ import { createInitialState } from '../../simulation/engine';
 import { MISSIONS } from '../../simulation/missions';
 import { askNola, resetAiAvailability } from './chatService';
 import { loadKnowledge, searchKnowledge, tokenize } from './knowledge';
-import { buildContext, builtInReply, describeContext, type CompanionContext } from './responder';
+import { buildContext, builtInReply, describeContext, OFF_TOPIC_REPLY, type CompanionContext } from './responder';
 
 const NO_CONTEXT: CompanionContext = { modulesCompleted: 0, nextModuleTitle: 'Understanding Space', missionTitle: null, nextTask: null, warnings: [], hasStation: false };
 
@@ -91,7 +91,8 @@ describe("NOLA's built-in replies", () => {
   it('handles small talk and off-topic questions kindly', () => {
     expect(builtInReply('hello', [], NO_CONTEXT).text).toMatch(/Hello, cadet/);
     expect(builtInReply('who are you?', [], NO_CONTEXT).text).toMatch(/training robot/);
-    expect(builtInReply('write my history essay', [], NO_CONTEXT).text).toMatch(/space-training robot/);
+    expect(builtInReply('write my history essay', [], NO_CONTEXT).text).toBe(OFF_TOPIC_REPLY);
+    expect(OFF_TOPIC_REPLY).toBe(SERVER_OFF_TOPIC_REPLY);
   });
 });
 
@@ -156,14 +157,50 @@ describe('AI backend (api/chat)', () => {
     expect(turn).toContain('<student_message>\nWhy?');
   });
 
+  describe('Gemini call', () => {
+    const chat: ChatRequest = { message: 'Why is space dark?', history: [{ role: 'user', content: 'Hi' }, { role: 'assistant', content: 'Hello!' }], passages: [], context: '' };
+    const gemini = (body: unknown, status = 200) => vi.fn(async () => Response.json(body, { status })) as unknown as typeof fetch;
+    const reply = (text: string, finishReason = 'STOP') => ({ candidates: [{ content: { parts: [{ text }] }, finishReason }] });
+
+    it('sends the rules, the conversation and strict safety settings, with the key in a header', async () => {
+      const fetcher = gemini(reply('Space is dark because it is mostly empty.'));
+      expect(await askGemini(chat, 'secret-key', 'test-model', fetcher)).toBe('Space is dark because it is mostly empty.');
+      const [url, init] = (fetcher as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls[0]!;
+      expect(url).toBe('https://generativelanguage.googleapis.com/v1beta/models/test-model:generateContent');
+      expect(url).not.toContain('secret-key');
+      expect((init.headers as Record<string, string>)['x-goog-api-key']).toBe('secret-key');
+      const sent = JSON.parse(init.body as string);
+      expect(sent.systemInstruction.parts[0].text).toMatch(/YOUR ONE STRICT RULE/);
+      expect(sent.contents.map((c: { role: string }) => c.role)).toEqual(['user', 'model', 'user']);
+      expect(sent.contents[2].parts[0].text).toContain('<student_message>\nWhy is space dark?');
+      expect(sent.safetySettings).toHaveLength(4);
+      expect(sent.safetySettings.every((s: { threshold: string }) => s.threshold === 'BLOCK_LOW_AND_ABOVE')).toBe(true);
+      expect(sent.tools).toBeUndefined();
+    });
+
+    it('turns the off-topic marker into the fixed "ask about space" reply', async () => {
+      for (const text of ['OFF_TOPIC', ' off_topic. ', '"OFF_TOPIC"', 'OFF_TOPIC\nSorry!']) {
+        expect(await askGemini(chat, 'k', 'm', gemini(reply(text)))).toBe(SERVER_OFF_TOPIC_REPLY);
+      }
+    });
+
+    it('returns nothing when Gemini blocks or sends an empty reply, and throws on HTTP errors', async () => {
+      expect(await askGemini(chat, 'k', 'm', gemini({ promptFeedback: { blockReason: 'SAFETY' } }))).toBeNull();
+      expect(await askGemini(chat, 'k', 'm', gemini(reply('partial', 'SAFETY')))).toBeNull();
+      expect(await askGemini(chat, 'k', 'm', gemini(reply('   ')))).toBeNull();
+      expect(await askGemini(chat, 'k', 'm', gemini({}))).toBeNull();
+      await expect(askGemini(chat, 'k', 'm', gemini({ error: {} }, 429))).rejects.toBeInstanceOf(GeminiError);
+    });
+  });
+
   it('reports "unavailable" when no AI key is configured', async () => {
-    vi.stubEnv('ANTHROPIC_API_KEY', '');
+    vi.stubEnv('GEMINI_API_KEY', '');
     const response = await POST(new Request('https://example.test/api/chat', { method: 'POST', body: '{}' }));
     expect(response.status).toBe(503);
   });
 
   it('rejects callers who are not signed in', async () => {
-    vi.stubEnv('ANTHROPIC_API_KEY', 'test-key');
+    vi.stubEnv('GEMINI_API_KEY', 'test-key');
     vi.stubEnv('FIREBASE_PROJECT_ID', 'demo-project');
     const noToken = await POST(new Request('https://example.test/api/chat', { method: 'POST', body: JSON.stringify({ message: 'hi' }) }));
     expect(noToken.status).toBe(401);

@@ -80,8 +80,8 @@ Vercel hosts the website and runs the two small server functions in `api/`.
 |---|---|---|
 | `VITE_FIREBASE_API_KEY` and the other five `VITE_FIREBASE_*` values | The app | Same values as `.env.local` |
 | `FIREBASE_PROJECT_ID` | AI chat | Your Firebase project id (for example `nola-space-trainer`). Lets the server check who is asking |
-| `ANTHROPIC_API_KEY` | AI chat | Secret. Without it NOLA uses built-in answers only |
-| `AI_MODEL` | AI chat (optional) | Defaults to `claude-opus-5-5`. Set `claude-haiku-5-5` for a much cheaper model |
+| `GEMINI_API_KEY` | AI chat | Secret. Create one in [Google AI Studio](https://aistudio.google.com/apikey). Without it NOLA uses built-in answers only |
+| `AI_MODEL` | AI chat (optional) | Defaults to `gemini-2.5-flash`. Set this if Google renames or retires that model |
 | `VITE_SPACE_DATA_SOURCE` | Real NASA data (optional) | Set to `nasa` to use NASA data; leave unset for simulated data |
 | `NASA_API_KEY` | Real NASA data (optional) | Free from [api.nasa.gov](https://api.nasa.gov). Without it NASA's low-limit `DEMO_KEY` is used |
 
@@ -101,7 +101,7 @@ To run the server functions on your own computer, use the Vercel CLI (`npx verce
 - **Phaser 3** – the 2D game. Downloaded only when the Mission page is opened.
 - **Firebase Authentication + Cloud Firestore** – accounts and each student's data.
 - **Vercel functions** – two small server programs: the AI chat and the NASA data fetch.
-- **Anthropic API** – the optional AI model behind NOLA's chat.
+- **Google Gemini API** – the optional AI model behind NOLA's chat.
 - **Vitest** – unit tests.
 - **Self-hosted fonts** (Fredoka, Nunito, Lexend) and the **browser's own speech voice** for read-aloud, so a children's app sends nothing to font or speech services.
 
@@ -202,15 +202,17 @@ Safety measures:
 
 - The AI key exists only on the server. The browser never sees it.
 - Only signed-in students can use the AI; the server verifies their Firebase login.
-- NOLA's rules (age-appropriate, on-topic, never ask for personal details) are fixed on the server.
+- NOLA's rules (age-appropriate, never ask for personal details) are fixed on the server.
+- **Space only.** NOLA answers questions about space, NASA, the Academy modules and this app. Anything else gets one fixed reply asking for a space question. The model signals an off-topic question with a marker word and the server substitutes the fixed reply, so the wording is always the same.
+- Gemini's safety filters are set to their strictest level.
 - The AI has no tools. It can only return text.
 - Messages that look like personal details, and questions about the student's own station ("what should I do next?"), are answered by the built-in brain and never sent to the AI.
 - Size limits on every field, and a per-student rate limit.
 - If the AI is off, slow, fails or declines, the built-in answer is used.
 
-Known limits: the rate limit is kept in server memory, so it is a first defence, not a guarantee; set a spending limit in your Anthropic account. The lesson passages are chosen in the browser and sent with the question; a student who tampers with them can only affect their own answer. Moving the search to the server with a vector database is the natural upgrade if the knowledge base grows beyond the lessons.
+Known limits: the rate limit is kept in server memory, so it is a first defence, not a guarantee; set a quota or budget on the key in your Google account. The lesson passages are chosen in the browser and sent with the question; a student who tampers with them can only affect their own answer. Moving the search to the server with a vector database is the natural upgrade if the knowledge base grows beyond the lessons.
 
-**Status:** the request checks, the sign-in check and every fallback path are unit-tested. The call to the AI model itself has not been run, because no API key was available during the build. Test it once after adding `ANTHROPIC_API_KEY`.
+**Status:** the request checks, the sign-in check, the request sent to Gemini, the off-topic handling and every fallback path are unit-tested against simulated Gemini responses. The call to the real Gemini service has not been run, because no API key was available during the build. Test it once after adding `GEMINI_API_KEY`.
 
 ## Accessibility
 
