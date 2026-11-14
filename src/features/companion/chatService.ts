@@ -1,3 +1,4 @@
+import { calculate } from './calculator';
 import type { SearchHit } from './knowledge';
 import { builtInReply, describeContext, type CompanionContext, type Reply } from './responder';
 
@@ -77,6 +78,10 @@ const KEEP_LOCAL = /\b(hint|stuck|what (should|do) i do|what next|what now|next 
  * from here to the simulation.
  */
 export async function askNola({ message, history, hits, suggestions = [], context, getToken }: AskOptions): Promise<Reply> {
+  // Maths is answered exactly by NOLA's calculator, never guessed by the AI.
+  const calculation = calculate(message);
+  if (calculation) return { text: calculation.text, mood: 'excited', sources: calculation.source ? [{ label: calculation.source }] : [], origin: 'calculator' };
+
   const fallback = builtInReply(message, hits, context, suggestions);
   if (aiAvailable === false || KEEP_LOCAL.test(message)) return fallback;
 

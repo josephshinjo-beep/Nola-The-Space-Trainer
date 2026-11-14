@@ -208,7 +208,9 @@ To add another dataset during the hackathon: write a provider that returns `Envi
 
 ## Ask NOLA and the AI
 
-Every question goes through the same steps:
+**Calculator.** Maths questions are answered exactly by NOLA's own calculator (`calculator.ts`) before anything else, and are never sent to the AI, which can get arithmetic wrong. It shows its working and handles plain sums ("what is 12 × 7"), crew supplies from NASA values ("how much oxygen do 4 astronauts need for 30 days"), light and message delay, weight and age on other planets, travel times and sols. It uses a small strict parser, never `eval`.
+
+Every other question goes through the same steps:
 
 1. **Search.** `knowledge.ts` finds the most relevant passages in NOLA's knowledge base: the Academy's lesson cards, NOLA's space notes (`spaceFacts.ts`), help about the app, and a 541-entry space general-knowledge corpus (`src/features/companion/corpus/space-gk.json`). Hand-written, child-friendly passages are preferred when they fit as well as a corpus entry. This is the retrieval step of RAG (retrieval-augmented generation). It is a keyword search that runs in the browser.
 2. **Answer.** If the AI backend is available, the question, the passages and a short situation summary are sent to `api/chat.ts`, which asks the AI model to answer using that material. Otherwise NOLA replies with the best passage directly.

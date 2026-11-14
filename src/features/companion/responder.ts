@@ -23,7 +23,7 @@ export interface Reply {
   mood: NolaMood;
   sources: ReplySource[];
   /** Who wrote the answer, shown to the student for honesty. */
-  origin: 'built-in' | 'ai';
+  origin: 'built-in' | 'ai' | 'calculator';
   /** Related questions the student can tap when NOLA has no confident answer. */
   suggestions?: string[];
 }
@@ -86,6 +86,8 @@ export const SUGGESTED_QUESTIONS = [
   'What is hydroponics?',
   'What should I do next?',
   'How long does a message take to reach Mars?',
+  'How much oxygen do 4 astronauts need for 30 days?',
+  'I weigh 35 kg. What would I weigh on Mars?',
 ];
 
 const PERSONAL_INFO = /\b(my (home )?address|my phone|my password|my school is|my real name|my full name|my email|i live (at|in|on)\b)|\b\d{7,}\b|[\w.+-]+@[\w-]+\.[a-z]{2,}/i;

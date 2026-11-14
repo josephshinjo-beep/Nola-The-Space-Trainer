@@ -151,7 +151,7 @@ export function CompanionPage() {
             ) : (
               <li key={item.id} className="flex justify-start">
                 <div className="max-w-[90%] rounded-3xl rounded-bl-md bg-star px-5 py-4 text-void">
-                  <p className="mb-1 font-display text-sm font-semibold uppercase tracking-widest text-[#b84e00]">NOLA {item.reply.origin === 'ai' ? '· AI answer' : ''}</p>
+                  <p className="mb-1 font-display text-sm font-semibold uppercase tracking-widest text-[#b84e00]">NOLA {item.reply.origin === 'ai' ? '· AI answer' : item.reply.origin === 'calculator' ? '· Calculator' : ''}</p>
                   <p className="whitespace-pre-line text-lg leading-relaxed">{item.reply.text}</p>
                   {item.reply.sources.length > 0 && (
                     <p className="mt-3 flex flex-wrap items-center gap-2 text-base font-semibold">
