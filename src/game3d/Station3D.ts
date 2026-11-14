@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import type { RoomId } from '../simulation/types';
-import { buildWalkGrid, COLS, PLAYER_START, roomAtTile, ROWS, TILE } from '../game/stationMap';
+import { buildWalkGrid, COLS, EQUIPMENT, PLAYER_START, ROOMS, roomAtTile, ROWS, TILE } from '../game/stationMap';
 import { angleDelta, CAMERA_FOV, cameraOffset, damp, FOLLOW_LAG, LOOK_LEAD, screenToWorld, snapYaw, type YawSnap } from './camera';
+import { cameraSide, edgeLips, FADED_OPACITY, wallHeight, wallTiles } from './level';
 
 /**
  * The 3D station view: a fixed high-angle diagonal camera following a blocky
@@ -17,6 +18,63 @@ const SPEED = 3.6; // tiles per second
 const RADIUS = 0.28; // astronaut's footprint, in tiles
 const TURN_LAG = 0.08; // seconds, for turning toward the move direction
 const FLOOR_SHADES = [0x3a4766, 0x34405e, 0x404d6e];
+const WALL_SHADES = [0x252f4d, 0x2a3556, 0x222b47];
+const WALL_LAG = 0.12; // seconds, for walls rising and lowering when the camera turns
+const FADE_LAG = 0.1; // seconds, for blocks fading out of the way
+
+/**
+ * A Lambert material whose opacity can be set per instance, through an
+ * `instanceOpacity` attribute. Used for blocks that fade when they hide the astronaut.
+ */
+function fadeableMaterial(color: number, emissive = 0x000000): THREE.MeshLambertMaterial {
+  const material = new THREE.MeshLambertMaterial({ color, emissive, transparent: true });
+  material.onBeforeCompile = (shader) => {
+    shader.vertexShader = shader.vertexShader
+      .replace('#include <common>', '#include <common>\nattribute float instanceOpacity;\nvarying float vInstanceOpacity;')
+      .replace('#include <begin_vertex>', '#include <begin_vertex>\nvInstanceOpacity = instanceOpacity;');
+    shader.fragmentShader = shader.fragmentShader
+      .replace('#include <common>', '#include <common>\nvarying float vInstanceOpacity;')
+      .replace('#include <opaque_fragment>', '#include <opaque_fragment>\ngl_FragColor.a *= vInstanceOpacity;');
+  };
+  material.customProgramCacheKey = () => 'nola-fadeable';
+  return material;
+}
+
+/** One or more instanced meshes whose blocks fade together, by index. */
+class FadeGroup {
+  readonly opacity: Float32Array;
+  private target: Float32Array;
+  private attributes: THREE.InstancedBufferAttribute[];
+
+  constructor(readonly meshes: THREE.InstancedMesh[]) {
+    const count = meshes[0]!.count;
+    this.opacity = new Float32Array(count).fill(1);
+    this.target = new Float32Array(count).fill(1);
+    this.attributes = meshes.map((mesh) => {
+      const attribute = new THREE.InstancedBufferAttribute(this.opacity, 1);
+      attribute.setUsage(THREE.DynamicDrawUsage);
+      mesh.geometry.setAttribute('instanceOpacity', attribute);
+      return attribute;
+    });
+  }
+
+  /** Fade the given blocks out of the way and bring every other block back. */
+  setFaded(ids: ReadonlySet<number>): void {
+    for (let i = 0; i < this.target.length; i++) this.target[i] = ids.has(i) ? FADED_OPACITY : 1;
+  }
+
+  step(dt: number): void {
+    const k = damp(dt, FADE_LAG);
+    let changed = false;
+    for (let i = 0; i < this.opacity.length; i++) {
+      const gap = this.target[i]! - this.opacity[i]!;
+      if (Math.abs(gap) < 0.002) continue;
+      this.opacity[i] = Math.abs(gap) < 0.01 ? this.target[i]! : this.opacity[i]! + gap * k;
+      changed = true;
+    }
+    if (changed) for (const attribute of this.attributes) attribute.needsUpdate = true;
+  }
+}
 
 export interface StationOptions {
   lockedRooms: RoomId[];
@@ -49,6 +107,10 @@ export class Station3D {
   private resizeObserver: ResizeObserver;
   private frames = 0;
   private fpsTime = 0;
+  private walls!: { mesh: THREE.InstancedMesh; tiles: { x: number; y: number; height: number; target: number; shade: number }[]; side: string; moving: boolean };
+  private fadeGroups: FadeGroup[] = [];
+  private raycaster = new THREE.Raycaster();
+  private rayTarget = new THREE.Vector3();
 
   constructor(
     private container: HTMLElement,
@@ -59,6 +121,10 @@ export class Station3D {
     this.scene.background = new THREE.Color(0x070b1f);
     this.buildLights();
     this.buildFloor();
+    this.buildEdges();
+    this.buildWalls();
+    this.buildMachines();
+    this.buildLockedDoors();
     this.buildAstronaut();
 
     const start = { x: PLAYER_START.x / TILE, z: PLAYER_START.y / TILE };
@@ -81,8 +147,10 @@ export class Station3D {
   debugState() {
     const { x, z } = this.player.position;
     const { calls, triangles } = this.renderer.info.render;
+    let faded = 0;
+    for (const group of this.fadeGroups) for (const value of group.opacity) if (value < 0.9) faded += 1;
     const size = this.renderer.getDrawingBufferSize(new THREE.Vector2());
-    return { x, z, yaw: this.yaw, heading: this.heading, camera: { x: this.camera.position.x, y: this.camera.position.y, z: this.camera.position.z }, calls, triangles, pixels: `${size.x}x${size.y}` };
+    return { x, z, yaw: this.yaw, heading: this.heading, camera: { x: this.camera.position.x, y: this.camera.position.y, z: this.camera.position.z }, calls, triangles, pixels: `${size.x}x${size.y}`, faded, wallsMoving: this.walls.moving, lowWalls: this.walls.tiles.filter((t) => t.height < 1.5).length, tallWalls: this.walls.tiles.filter((t) => t.height >= 1.5).length };
   }
 
   // ------------------------------------------------------------ set-up
@@ -118,7 +186,7 @@ export class Station3D {
     // Step 1 uses simple lights so the shapes read clearly; step 3 replaces them.
     this.scene.add(new THREE.HemisphereLight(0x9fb4ff, 0x1a2040, 1.6));
     const sun = new THREE.DirectionalLight(0xffe2b8, 1.4);
-    sun.position.set(-4, 10, 3);
+    sun.position.set(5, 10, 2);
     this.scene.add(sun);
   }
 
@@ -141,6 +209,134 @@ export class Station3D {
     });
     tile.instanceMatrix.needsUpdate = true;
     this.scene.add(tile);
+  }
+
+  /** Raised block edges along the walkways, where the floor meets a wall. */
+  private buildEdges(): void {
+    const lips = edgeLips(COLS, ROWS, (x, y) => this.isFloor(x, y));
+    const mesh = new THREE.InstancedMesh(this.track(new THREE.BoxGeometry(1, 0.1, 0.12)), this.track(new THREE.MeshLambertMaterial({ color: 0x5c6c94 })), lips.length);
+    const matrix = new THREE.Matrix4();
+    const turn = new THREE.Matrix4().makeRotationY(Math.PI / 2);
+    lips.forEach((lip, index) => {
+      const along = lip.side === 'n' || lip.side === 's';
+      const x = lip.x + (lip.side === 'w' ? 0.06 : lip.side === 'e' ? 0.94 : 0.5);
+      const z = lip.y + (lip.side === 'n' ? 0.06 : lip.side === 's' ? 0.94 : 0.5);
+      matrix.makeTranslation(x, 0.05, z);
+      if (!along) matrix.multiply(turn);
+      mesh.setMatrixAt(index, matrix);
+    });
+    this.scene.add(mesh);
+  }
+
+  /**
+   * Wall blocks on every empty tile next to the floor. Blocks between the
+   * camera and the floor are low (rooms are cut away toward the camera);
+   * blocks behind the floor are tall. Heights follow the camera when it turns.
+   */
+  private buildWalls(): void {
+    const isFloor = (x: number, y: number) => this.isFloor(x, y);
+    const offset = cameraOffset(this.yaw);
+    const { sx, sz } = cameraSide(offset.x, offset.z);
+    const tiles = wallTiles(COLS, ROWS, isFloor).map((tile) => {
+      const height = wallHeight(tile.x, tile.y, isFloor, sx, sz);
+      return { ...tile, height, target: height, shade: Math.floor(hash(tile.x + 101, tile.y + 37) * WALL_SHADES.length) };
+    });
+    const geometry = this.track(new THREE.BoxGeometry(1, 1, 1).translate(0, 0.5, 0));
+    const mesh = new THREE.InstancedMesh(geometry, this.track(fadeableMaterial(0xffffff)), tiles.length);
+    const color = new THREE.Color();
+    tiles.forEach((tile, index) => mesh.setColorAt(index, color.setHex(WALL_SHADES[tile.shade]!)));
+    this.walls = { mesh, tiles, side: `${sx},${sz}`, moving: false };
+    this.placeWalls();
+    this.scene.add(mesh);
+    this.fadeGroups.push(new FadeGroup([mesh]));
+  }
+
+  private placeWalls(): void {
+    const matrix = new THREE.Matrix4();
+    const { mesh, tiles } = this.walls;
+    tiles.forEach((tile, index) => {
+      matrix.makeScale(1, tile.height, 1).setPosition(tile.x + 0.5, 0, tile.y + 0.5);
+      mesh.setMatrixAt(index, matrix);
+    });
+    mesh.instanceMatrix.needsUpdate = true;
+    mesh.computeBoundingSphere();
+  }
+
+  /** When the camera has turned to another side, walls rise and lower smoothly to keep the rooms open. */
+  private updateWalls(dt: number): void {
+    const offset = cameraOffset(this.yaw);
+    const { sx, sz } = cameraSide(offset.x, offset.z);
+    const side = `${sx},${sz}`;
+    if (side !== this.walls.side) {
+      this.walls.side = side;
+      const isFloor = (x: number, y: number) => this.isFloor(x, y);
+      for (const tile of this.walls.tiles) tile.target = wallHeight(tile.x, tile.y, isFloor, sx, sz);
+      this.walls.moving = true;
+    }
+    if (!this.walls.moving) return;
+    const k = damp(dt, WALL_LAG);
+    let moving = false;
+    for (const tile of this.walls.tiles) {
+      const gap = tile.target - tile.height;
+      if (Math.abs(gap) < 0.005) tile.height = tile.target;
+      else {
+        tile.height += gap * k;
+        moving = true;
+      }
+    }
+    this.walls.moving = moving;
+    this.placeWalls();
+  }
+
+  /** The station's machines as simple blocks with a glowing screen on top. */
+  private buildMachines(): void {
+    const body = new THREE.InstancedMesh(this.track(new THREE.BoxGeometry(0.8, 0.9, 0.8).translate(0, 0.45, 0)), this.track(fadeableMaterial(0x5b6a8f)), EQUIPMENT.length);
+    const screen = new THREE.InstancedMesh(this.track(new THREE.BoxGeometry(0.62, 0.06, 0.62)), this.track(fadeableMaterial(0x1d6f7a, 0x2bb8c9)), EQUIPMENT.length);
+    const matrix = new THREE.Matrix4();
+    EQUIPMENT.forEach((item, index) => {
+      body.setMatrixAt(index, matrix.makeTranslation(item.x + 0.5, 0, item.y + 0.5));
+      screen.setMatrixAt(index, matrix.makeTranslation(item.x + 0.5, 0.93, item.y + 0.5));
+    });
+    body.computeBoundingSphere();
+    this.scene.add(body, screen);
+    this.fadeGroups.push(new FadeGroup([body, screen]));
+  }
+
+  /** Doors of rooms that are still locked, shown as barriers (they also block walking). */
+  private buildLockedDoors(): void {
+    const locked = ROOMS.filter((room) => this.options.lockedRooms.includes(room.id)).flatMap((room) => room.door);
+    if (locked.length === 0) return;
+    const mesh = new THREE.InstancedMesh(this.track(new THREE.BoxGeometry(1, 1.1, 0.3).translate(0, 0.55, 0)), this.track(fadeableMaterial(0xc4552a, 0x3a1206)), locked.length);
+    const matrix = new THREE.Matrix4();
+    locked.forEach((door, index) => mesh.setMatrixAt(index, matrix.makeTranslation(door.x + 0.5, 0, door.y + 0.5)));
+    mesh.computeBoundingSphere();
+    this.scene.add(mesh);
+    this.fadeGroups.push(new FadeGroup([mesh]));
+  }
+
+  /**
+   * Fade-on-occlusion: rays from the camera to the astronaut's feet, waist
+   * and head. Any wall, machine or door block they hit fades to 25%.
+   */
+  private updateOcclusion(dt: number): void {
+    const p = this.player.position;
+    const targets = this.fadeGroups.map((group) => group.meshes[0]!);
+    const hits = this.fadeGroups.map(() => new Set<number>());
+    for (const height of [0.15, 0.55, 0.95]) {
+      this.rayTarget.set(p.x, height, p.z);
+      const direction = this.rayTarget.clone().sub(this.camera.position);
+      const distance = direction.length();
+      this.raycaster.set(this.camera.position, direction.normalize());
+      this.raycaster.far = distance - 0.35;
+      for (const hit of this.raycaster.intersectObjects(targets, false)) {
+        const group = targets.indexOf(hit.object as THREE.InstancedMesh);
+        if (group >= 0 && hit.instanceId !== undefined) hits[group]!.add(hit.instanceId);
+      }
+    }
+    this.fadeGroups.forEach((group, index) => {
+      group.setFaded(hits[index]!);
+      group.step(dt);
+    });
   }
 
   /** Floor is every room, corridor and door tile (machines stand on floor too). */
@@ -257,6 +453,8 @@ export class Station3D {
     this.look.z += (lead.z - this.look.z) * k;
     this.look.y = 0.5;
     this.placeCamera();
+    this.updateWalls(dt);
+    this.updateOcclusion(dt);
   }
 
   private placeCamera(): void {
