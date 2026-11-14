@@ -16,7 +16,8 @@ export function AppLayout() {
   const { profile, logout } = useAuth();
   // The game fills the whole screen; every other page sits in a centred column.
   const { pathname } = useLocation();
-  const fullScreen = pathname === '/mission';
+  // The game pages fill the screen.
+  const fullScreen = pathname === '/mission' || pathname === '/mission3d';
 
   return (
     <div className="lg:flex">

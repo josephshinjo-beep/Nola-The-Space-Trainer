@@ -350,6 +350,9 @@ function StationGame() {
           <Link to="/profile" className={buttonClasses('secondary')}>
             Accessibility settings
           </Link>
+          <Link to="/mission3d" className={buttonClasses('secondary')} onClick={sim.saveNow}>
+            Try the 3D view (preview)
+          </Link>
           <Button
             variant="secondary"
             onClick={() => {

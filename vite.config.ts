@@ -74,6 +74,7 @@ export default defineConfig({
             { name: 'firebase', test: /node_modules[\\/](@firebase|firebase|re2js)[\\/]/, priority: 20 },
             { name: 'react', test: /node_modules[\\/](react|react-dom|react-router|scheduler)[\\/]/, priority: 20 },
             { name: 'phaser', test: /node_modules[\\/]phaser[\\/]/, priority: 20 },
+            { name: 'three', test: /node_modules[\\/]three[\\/]/, priority: 20 },
           ],
         },
       },

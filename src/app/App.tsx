@@ -13,6 +13,7 @@ import { ProtectedRoute, PublicOnlyRoute } from './RouteGuards';
 // Pages load the first time they are visited, so the first screen downloads
 // less. The home page and the sign-in pages stay in the main bundle.
 const MissionPage = lazy(() => import('../pages/MissionPage'));
+const Mission3DPage = lazy(() => import('../pages/Mission3DPage'));
 const AcademyPage = lazy(() => import('../pages/AcademyPage').then((m) => ({ default: m.AcademyPage })));
 const ModulePage = lazy(() => import('../pages/ModulePage').then((m) => ({ default: m.ModulePage })));
 const LessonPage = lazy(() => import('../pages/LessonPage').then((m) => ({ default: m.LessonPage })));
@@ -54,6 +55,7 @@ export default function App() {
                 <Route path="/academy/:moduleId" element={page(<ModulePage />)} />
                 <Route path="/academy/:moduleId/lesson" element={page(<LessonPage />)} />
                 <Route path="/mission" element={page(<MissionPage />)} />
+                <Route path="/mission3d" element={page(<Mission3DPage />)} />
                 <Route path="/companion" element={page(<CompanionPage />)} />
                 <Route path="/profile" element={page(<ProfilePage />)} />
               </Route>
