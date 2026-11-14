@@ -2,7 +2,11 @@ import { createRemoteJWKSet, jwtVerify } from 'jose';
 
 /**
  * NOLA's AI brain. Runs on the server (a Vercel function), never in the
- * browser, so the AI key stays secret. It uses Google's Gemini API.
+ * browser, so the AI key stays secret.
+ *
+ * It can use either of two AI services:
+ *  - OpenRouter (preferred when its key is set), using FREE models only.
+ *  - Google Gemini, used when only a Gemini key is set.
  *
  * What keeps this safe for children:
  *  - Only signed-in students can call it (their Firebase login is verified).
@@ -11,47 +15,83 @@ import { createRemoteJWKSet, jwtVerify } from 'jose';
  *    Anything else gets one fixed, friendly "please ask about space" reply.
  *  - The AI is given NO tools: it can only write text. It has no way to
  *    change a student's station, progress or account.
- *  - Gemini's own safety filters are set to their strictest level.
+ *  - With Gemini, Google's safety filters are set to their strictest level.
  *  - Message sizes and request rates are limited.
  *  - If anything fails, the app falls back to NOLA's built-in answers.
  *
  * Server settings (Vercel → Project → Settings → Environment Variables):
- *   GEMINI_API_KEY       required to switch the AI on (from Google AI Studio)
+ *   OPENROUTER_API_KEY   switches the AI on using OpenRouter's free models
+ *   OPENROUTER_MODEL     optional; one model id (or several, comma-separated) to try first
+ *   GEMINI_API_KEY       alternative: switches the AI on using Google Gemini
+ *   AI_MODEL             optional; a Gemini model name to try first
  *   FIREBASE_PROJECT_ID  optional; defaults to VITE_FIREBASE_PROJECT_ID
- *   AI_MODEL             optional; tried first, before the models listed below
  *
  * To check the set-up, open /api/chat in a browser: it reports what is
- * configured and whether Google accepts the key (never the key itself).
+ * configured and whether the key is accepted (never the key itself).
+ * Open /api/chat?test=1 to send the AI one tiny real question.
  */
 
 /** Vercel may stop a function after this many seconds (also set in vercel.json). */
 export const maxDuration = 30;
 
+export type Provider = 'openrouter' | 'gemini';
+
+const PROVIDER_NAMES: Record<Provider, string> = { openrouter: 'OpenRouter', gemini: 'Gemini' };
+
+/** OpenRouter when its key is set, otherwise Gemini, otherwise none. */
+export function activeProvider(): Provider | null {
+  if (process.env.OPENROUTER_API_KEY?.trim()) return 'openrouter';
+  if (process.env.GEMINI_API_KEY?.trim()) return 'gemini';
+  return null;
+}
+
+const providerKey = (provider: Provider) => (provider === 'openrouter' ? process.env.OPENROUTER_API_KEY : process.env.GEMINI_API_KEY)?.trim() ?? '';
+
 /**
- * Models to try, in order. Google renames and retires models, so if one is
- * not found the next is tried. AI_MODEL, when set, goes first.
+ * Gemini models to try, in order. Google renames and retires models, so if
+ * one is not found the next is tried. AI_MODEL, when set, goes first.
  */
-const MODEL_CHOICES = ['gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-flash-latest', 'gemini-2.0-flash'];
+const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-flash-latest', 'gemini-2.0-flash'];
 
-/** How long to wait for one model before moving on to the next. */
-const MODEL_TIMEOUT_MS = 9_000;
+/**
+ * Free OpenRouter models to try, in order. Chosen from OpenRouter's free
+ * list (checked November 2026) to avoid the busiest free models, which
+ * are often rate-limited: the big-brand ones (Google, NVIDIA, Meta,
+ * DeepSeek, Qwen and others) and OpenRouter's own "free" router.
+ * Free models come and go, so if none of these exist any more, the server
+ * looks up OpenRouter's current free list and picks quiet ones from it.
+ */
+const OPENROUTER_FREE_MODELS = ['inclusionai/ling-3.2-flash:free', 'thinkingmachines/inkling-2-small:free', 'recursive/flint-v1.0:free', 'baidu/ernie-5.5-flash-preview:free'];
+
+/** How long to wait for one model before moving on to the next. Free models are slower. */
+const MODEL_TIMEOUT_MS: Record<Provider, number> = { openrouter: 12_000, gemini: 9_000 };
 /** Stop trying further models after this long, so the student is never left waiting. */
-const TOTAL_BUDGET_MS = 20_000;
+const TOTAL_BUDGET_MS = 24_000;
 
-function modelsToTry(): string[] {
-  const preferred = process.env.AI_MODEL?.trim();
-  return [...new Set(preferred ? [preferred, ...MODEL_CHOICES] : MODEL_CHOICES)];
+function configuredModels(provider: Provider): string[] {
+  const preferred = provider === 'openrouter' ? (process.env.OPENROUTER_MODEL ?? '') : (process.env.AI_MODEL ?? '');
+  const extra = preferred
+    .split(',')
+    .map((model) => model.trim())
+    .filter(Boolean);
+  return [...new Set([...extra, ...(provider === 'openrouter' ? OPENROUTER_FREE_MODELS : GEMINI_MODELS)])];
+}
+
+/** Kept for the Gemini tests and the set-up report. */
+function modelsToTry(provider: Provider = 'gemini'): string[] {
+  return configuredModels(provider);
 }
 
 /** The Firebase project whose students may use the AI. */
 const firebaseProjectId = () => process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID || '';
 
-/** Remembers which model worked, so later requests go straight to it. */
-let workingModel: string | null = null;
+/** Remembers which model worked for each service, so later requests go straight to it. */
+const workingModel = new Map<Provider, string>();
 
 /** For tests. */
 export function forgetWorkingModel(): void {
-  workingModel = null;
+  workingModel.clear();
+  freeModelCache = null;
 }
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 
@@ -198,26 +238,30 @@ interface GeminiResponse {
   promptFeedback?: { blockReason?: string };
 }
 
-export class GeminiError extends Error {
+/** An error reply from the AI service (Gemini or OpenRouter). */
+export class AiError extends Error {
   constructor(
     readonly status: number,
-    /** Google's own explanation, shown to help fix set-up problems. */
+    /** The service's own explanation, shown to help fix set-up problems. */
     readonly detail = '',
-    /** Google's machine-readable reason, such as API_KEY_INVALID. */
+    /** A machine-readable reason, such as API_KEY_INVALID or DATA_POLICY. */
     readonly reason = '',
   ) {
-    super(`Gemini answered ${status}${detail ? `: ${detail}` : ''}`);
+    super(`The AI service answered ${status}${detail ? `: ${detail}` : ''}`);
   }
 }
 
+/** The older name, still used by the Gemini code and tests. */
+export { AiError as GeminiError };
+
 /** Reads Google's error reply into a GeminiError. */
-async function toGeminiError(response: Response): Promise<GeminiError> {
+async function toGeminiError(response: Response): Promise<AiError> {
   try {
     const body = (await response.json()) as { error?: { message?: string; status?: string; details?: { reason?: string }[] } };
     const reason = body.error?.details?.find((item) => item.reason)?.reason ?? body.error?.status ?? '';
-    return new GeminiError(response.status, (body.error?.message ?? '').slice(0, 240), reason);
+    return new AiError(response.status, (body.error?.message ?? '').slice(0, 240), reason);
   } catch {
-    return new GeminiError(response.status);
+    return new AiError(response.status);
   }
 }
 
@@ -230,7 +274,7 @@ async function toGeminiError(response: Response): Promise<GeminiError> {
  * are short and come with lesson material, so they do not need it, and
  * without it replies arrive in a second or two instead of ten or more.
  */
-export async function askGemini(chat: ChatRequest, apiKey: string, model: string, fetcher: typeof fetch = fetch, quickMode = true, timeoutMs = MODEL_TIMEOUT_MS): Promise<string | null> {
+export async function askGemini(chat: ChatRequest, apiKey: string, model: string, fetcher: typeof fetch = fetch, quickMode = true, timeoutMs = MODEL_TIMEOUT_MS.gemini): Promise<string | null> {
   const response = await fetcher(`${GEMINI_URL}/${encodeURIComponent(model)}:generateContent`, {
     method: 'POST',
     // The key travels in a header, not the address, so it stays out of server logs.
@@ -262,53 +306,223 @@ export async function askGemini(chat: ChatRequest, apiKey: string, model: string
     .join('')
     .trim();
   if (!answer) return null;
+  return finishAnswer(answer);
+}
+
+/**
+ * Tidies a model's reply: removes hidden "thinking" sections and the
+ * markdown symbols the chat window would show literally, and turns the
+ * off-topic marker into the fixed reply.
+ */
+export function finishAnswer(raw: string): string | null {
+  const answer = raw
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/<think>[\s\S]*$/i, '')
+    .replace(/\*\*(.+?)\*\*/g, '$1')
+    .replace(/^#{1,6}\s+/gm, '')
+    .trim();
+  if (!answer) return null;
   // The marker on its own, or wrapped in stray punctuation, means "off-topic".
   if (answer.replace(/[^A-Za-z_]/g, '').toUpperCase() === OFF_TOPIC_MARKER || answer.includes(OFF_TOPIC_MARKER)) return OFF_TOPIC_REPLY;
   return answer;
 }
 
+// ---------------------------------------------------------------- OpenRouter
+
+const OPENROUTER_URL = 'https://openrouter.ai/api/v1';
+
+interface OpenRouterModel {
+  id?: string;
+  context_length?: number;
+  pricing?: { prompt?: string | number; completion?: string | number };
+  architecture?: { input_modalities?: string[]; output_modalities?: string[] };
+}
+
+/** Big-brand or router models that are free but very busy, so often rate-limited. */
+const BUSY_FREE_MODEL = /^(openrouter|google|nvidia|meta-llama|deepseek|qwen|openai|mistralai|moonshotai|z-ai|x-ai|anthropic|microsoft)\//;
+/** Free models that are not general chat models, or are too small to answer well. */
+const UNSUITABLE_MODEL = /code|coder|lyria|audio|omni|guard|embed|(^|[-/])[0-2](\.\d+)?b(\b|:)/i;
+
+const isFree = (model: OpenRouterModel) => Boolean(model.id?.endsWith(':free')) || (String(model.pricing?.prompt) === '0' && String(model.pricing?.completion) === '0');
+
+/** Picks quiet, free, text-chat models from OpenRouter's full model list. */
+export function pickQuietFreeModels(models: OpenRouterModel[]): string[] {
+  return models
+    .filter((model) => typeof model.id === 'string' && isFree(model))
+    .filter((model) => !BUSY_FREE_MODEL.test(model.id!) && !UNSUITABLE_MODEL.test(model.id!))
+    .filter((model) => (model.architecture?.output_modalities ?? ['text']).every((kind) => kind === 'text'))
+    .filter((model) => (model.architecture?.input_modalities ?? ['text']).includes('text'))
+    .filter((model) => (model.context_length ?? 0) >= 32_000)
+    .map((model) => model.id!);
+}
+
+let freeModelCache: { at: number; ids: string[]; all: Set<string> } | null = null;
+
+/** OpenRouter's current list (public, no key needed), cached for an hour. */
+async function openRouterModels(fetcher: typeof fetch): Promise<{ ids: string[]; all: Set<string> }> {
+  if (freeModelCache && Date.now() - freeModelCache.at < 60 * 60 * 1000) return freeModelCache;
+  const response = await fetcher(`${OPENROUTER_URL}/models`, { signal: AbortSignal.timeout(8_000) });
+  if (!response.ok) throw new AiError(response.status, 'Could not read the OpenRouter model list.');
+  const data = (await response.json()) as { data?: OpenRouterModel[] };
+  const models = data.data ?? [];
+  freeModelCache = { at: Date.now(), ids: pickQuietFreeModels(models), all: new Set(models.flatMap((model) => (model.id ? [model.id] : []))) };
+  return freeModelCache;
+}
+
+/** Reads an OpenRouter error body (which can arrive even with status 200) into an AiError. */
+function toOpenRouterError(status: number, body: unknown): AiError {
+  const error = (body as { error?: { code?: number | string; message?: string; metadata?: { raw?: string } } } | null)?.error;
+  const message = `${error?.message ?? ''}${error?.metadata?.raw ? ` (${String(error.metadata.raw).slice(0, 120)})` : ''}`.slice(0, 240);
+  const code = Number(error?.code);
+  const finalStatus = status >= 400 ? status : Number.isFinite(code) && code >= 400 ? code : 502;
+  // Classify the problems that no other free model can fix.
+  const reason = /data policy|privacy/i.test(message)
+    ? 'DATA_POLICY'
+    : /free-models-per-day/i.test(message)
+      ? 'FREE_DAILY_LIMIT'
+      : /free-models-per-min/i.test(message)
+        ? 'FREE_MINUTE_LIMIT'
+        : finalStatus === 402
+          ? 'NO_CREDITS'
+          : finalStatus === 401
+            ? 'API_KEY_INVALID'
+            : '';
+  return new AiError(finalStatus, message, reason);
+}
+
+/**
+ * Asks one OpenRouter model for NOLA's reply. Same rules and the same
+ * reference material as Gemini, in OpenRouter's (OpenAI-style) format.
+ */
+export async function askOpenRouter(chat: ChatRequest, apiKey: string, model: string, fetcher: typeof fetch = fetch, timeoutMs = MODEL_TIMEOUT_MS.openrouter, lowEffort = true): Promise<string | null> {
+  const response = await fetcher(`${OPENROUTER_URL}/chat/completions`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${apiKey}`, 'X-Title': 'NOLA Space Trainer' },
+    signal: AbortSignal.timeout(timeoutMs),
+    body: JSON.stringify({
+      model,
+      messages: [
+        { role: 'system', content: SYSTEM_PROMPT },
+        ...chat.history.map((turn) => ({ role: turn.role, content: turn.content })),
+        { role: 'user', content: buildUserTurn(chat) },
+      ],
+      temperature: 0.4,
+      max_tokens: 900,
+      // Keep any "thinking" short and out of the reply, so answers come back quickly.
+      ...(lowEffort ? { reasoning: { effort: 'low', exclude: true } } : {}),
+      // No tools are provided: the model can only reply with text.
+    }),
+  });
+
+  let body: unknown = null;
+  try {
+    body = await response.json();
+  } catch {
+    body = null;
+  }
+  if (!response.ok || (body as { error?: unknown } | null)?.error) throw toOpenRouterError(response.status, body);
+
+  const choice = (body as { choices?: { message?: { content?: string | null }; finish_reason?: string }[] } | null)?.choices?.[0];
+  if (choice?.finish_reason === 'content_filter') return null;
+  const answer = finishAnswer(choice?.message?.content ?? '');
+  // An empty reply usually means the model spent its turn thinking: let the next model try.
+  if (answer === null) throw new AiError(502, 'The model sent an empty reply.');
+  return answer;
+}
+
+// ---------------------------------------------------------------- trying models in turn
+
 const isTimeout = (error: unknown) => error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
-const isBadKey = (error: GeminiError) => error.reason === 'API_KEY_INVALID' || error.status === 401 || /api key/i.test(error.detail);
+const isBadKey = (error: AiError) => error.reason === 'API_KEY_INVALID' || error.status === 401 || /api key/i.test(error.detail);
+/** Problems that are about the account, not the model, so trying another model will not help. */
+const isAccountProblem = (error: AiError) => isBadKey(error) || ['DATA_POLICY', 'FREE_DAILY_LIMIT', 'FREE_MINUTE_LIMIT', 'NO_CREDITS'].includes(error.reason);
+
+/** The models to try for a service, most likely first. */
+async function candidateModels(provider: Provider, fetcher: typeof fetch): Promise<string[]> {
+  let models = configuredModels(provider);
+  if (provider === 'openrouter') {
+    try {
+      // Skip configured models that OpenRouter no longer offers, and add quiet free ones it does.
+      const { ids, all } = await openRouterModels(fetcher);
+      const stillOffered = models.filter((model) => all.size === 0 || all.has(model));
+      models = [...new Set([...stillOffered, ...ids])].slice(0, 6);
+    } catch {
+      // The list is only a help: carry on with the configured models.
+    }
+  }
+  const remembered = workingModel.get(provider);
+  return remembered ? [remembered, ...models.filter((model) => model !== remembered)] : models;
+}
 
 /**
  * Tries each model in turn. It moves on when a model is missing, busy,
- * out of quota or too slow, and gives up at once when the key itself is bad.
+ * rate-limited or too slow, and gives up at once when the problem is the
+ * key or the account (so another model would fail in the same way).
  */
-export async function askGeminiWithFallback(chat: ChatRequest, apiKey: string, fetcher: typeof fetch = fetch, now: () => number = Date.now): Promise<string | null> {
-  const candidates = workingModel ? [workingModel, ...modelsToTry().filter((model) => model !== workingModel)] : modelsToTry();
+export async function askWithFallback(chat: ChatRequest, provider: Provider, apiKey: string, fetcher: typeof fetch = fetch, now: () => number = Date.now): Promise<string | null> {
+  const candidates = await candidateModels(provider, fetcher);
   const started = now();
-  let lastError: unknown = new GeminiError(404, 'No Gemini model could be used.');
+  let lastError: unknown = new AiError(404, `No ${PROVIDER_NAMES[provider]} model could be used.`);
 
   for (const model of candidates) {
     const remaining = TOTAL_BUDGET_MS - (now() - started);
     if (remaining < 2_000) break;
-    const timeout = Math.min(MODEL_TIMEOUT_MS, remaining);
+    const timeout = Math.min(MODEL_TIMEOUT_MS[provider], remaining);
     try {
       let answer: string | null;
       try {
-        answer = await askGemini(chat, apiKey, model, fetcher, true, timeout);
+        answer = provider === 'openrouter' ? await askOpenRouter(chat, apiKey, model, fetcher, timeout) : await askGemini(chat, apiKey, model, fetcher, true, timeout);
       } catch (error) {
-        // A few models do not accept the "no thinking" setting: ask again without it.
-        if (!(error instanceof GeminiError) || error.status !== 400 || !/think/i.test(error.detail)) throw error;
-        answer = await askGemini(chat, apiKey, model, fetcher, false, timeout);
+        // A few models do not accept the "think briefly" setting: ask again without it.
+        if (!(error instanceof AiError) || error.status !== 400 || !/think|reason/i.test(error.detail)) throw error;
+        answer = provider === 'openrouter' ? await askOpenRouter(chat, apiKey, model, fetcher, timeout, false) : await askGemini(chat, apiKey, model, fetcher, false, timeout);
       }
-      workingModel = model;
+      workingModel.set(provider, model);
       return answer;
     } catch (error) {
       lastError = error;
-      if (workingModel === model) workingModel = null;
-      const moveOn = isTimeout(error) || (error instanceof GeminiError && !isBadKey(error) && [404, 429, 500, 502, 503, 504].includes(error.status));
+      if (workingModel.get(provider) === model) workingModel.delete(provider);
+      const moveOn = isTimeout(error) || (error instanceof AiError && !isAccountProblem(error) && [400, 404, 408, 429, 500, 502, 503, 504].includes(error.status) && !(provider === 'gemini' && error.status === 400));
       if (!moveOn) throw error;
-      console.warn(`Gemini model "${model}" could not answer (${isTimeout(error) ? 'too slow' : (error as GeminiError).status}); trying the next one.`);
+      console.warn(`${PROVIDER_NAMES[provider]} model "${model}" could not answer (${isTimeout(error) ? 'too slow' : (error as AiError).status}); trying the next one.`);
     }
   }
   throw lastError;
 }
 
+/** Kept for the Gemini tests. */
+export function askGeminiWithFallback(chat: ChatRequest, apiKey: string, fetcher: typeof fetch = fetch, now: () => number = Date.now): Promise<string | null> {
+  return askWithFallback(chat, 'gemini', apiKey, fetcher, now);
+}
+
+/** Turns a failure into the reply the app understands, with a reason it can show. */
+function failureResponse(error: unknown, provider: Provider): Response {
+  if (isTimeout(error)) {
+    console.error(`${PROVIDER_NAMES[provider]} did not answer in time.`);
+    return json(504, { error: 'ai_failed', detail: 'timeout', provider });
+  }
+  if (error instanceof AiError) {
+    console.error(error.message);
+    const base = { provider, message: error.detail };
+    if (error.reason === 'DATA_POLICY') return json(503, { error: 'ai_unavailable', detail: 'privacy_settings', ...base });
+    if (error.reason === 'FREE_DAILY_LIMIT') return json(429, { error: 'slow_down', detail: 'free_daily_limit', ...base });
+    if (error.reason === 'FREE_MINUTE_LIMIT') return json(429, { error: 'slow_down', detail: 'rate_limited', ...base });
+    if (error.reason === 'NO_CREDITS') return json(503, { error: 'ai_unavailable', detail: 'no_credits', ...base });
+    if (isBadKey(error)) return json(503, { error: 'ai_unavailable', detail: 'key_rejected', ...base });
+    if (error.status === 403) return json(503, { error: 'ai_unavailable', detail: 'key_not_allowed', ...base });
+    if (error.status === 429) return json(429, { error: 'slow_down', detail: 'rate_limited', ...base });
+    if (error.status === 404) return json(503, { error: 'ai_unavailable', detail: 'model_not_found', ...base });
+    if (error.status === 400) return json(502, { error: 'ai_failed', detail: 'ai_rejected_request', ...base });
+    return json(502, { error: 'ai_failed', detail: 'ai_busy', ...base });
+  }
+  console.error('Unexpected chat error', error);
+  return json(502, { error: 'ai_failed', detail: 'unexpected', provider, message: error instanceof Error ? error.message.slice(0, 200) : '' });
+}
+
 export async function POST(request: Request): Promise<Response> {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const provider = activeProvider();
   const projectId = firebaseProjectId();
-  if (!apiKey) return json(503, { error: 'ai_unavailable', detail: 'missing_key' });
+  if (!provider) return json(503, { error: 'ai_unavailable', detail: 'missing_key' });
   if (!projectId) return json(503, { error: 'ai_unavailable', detail: 'missing_project_id' });
 
   const uid = await verifyStudent(request, projectId);
@@ -324,68 +538,81 @@ export async function POST(request: Request): Promise<Response> {
   if (!chat) return json(400, { error: 'bad_request' });
 
   try {
-    const answer = await askGeminiWithFallback(chat, apiKey);
+    const answer = await askWithFallback(chat, provider, providerKey(provider));
     if (answer === null) return json(200, { answer: null, reason: 'declined' });
-    return json(200, { answer, offTopic: answer === OFF_TOPIC_REPLY });
+    return json(200, { answer, offTopic: answer === OFF_TOPIC_REPLY, provider, model: workingModel.get(provider) });
   } catch (error) {
-    if (isTimeout(error)) {
-      console.error('Gemini did not answer in time.');
-      return json(504, { error: 'ai_failed', detail: 'timeout' });
-    }
-    if (error instanceof GeminiError) {
-      console.error(error.message);
-      const message = error.detail;
-      if (isBadKey(error)) return json(503, { error: 'ai_unavailable', detail: 'key_rejected', message });
-      if (error.status === 403) return json(503, { error: 'ai_unavailable', detail: 'key_not_allowed', message });
-      if (error.status === 429) return json(429, { error: 'slow_down', detail: 'gemini_quota', message });
-      if (error.status === 404) return json(503, { error: 'ai_unavailable', detail: 'model_not_found', message });
-      if (error.status === 400) return json(502, { error: 'ai_failed', detail: 'gemini_rejected_request', message });
-      return json(502, { error: 'ai_failed', detail: 'gemini_busy', message });
-    }
-    console.error('Unexpected chat error', error);
-    return json(502, { error: 'ai_failed', detail: 'unexpected', message: error instanceof Error ? error.message.slice(0, 200) : '' });
+    return failureResponse(error, provider);
   }
 }
 
 /** At most one live test every 20 seconds, so the test page cannot be used to burn quota. */
 let lastLiveTest = 0;
 
+/** Checks the key and finds the model that will be used. Never returns the key. */
+async function checkSetup(provider: Provider, apiKey: string): Promise<Record<string, unknown>> {
+  if (provider === 'openrouter') {
+    const keyResponse = await fetch(`${OPENROUTER_URL}/key`, { headers: { Authorization: `Bearer ${apiKey}` }, signal: AbortSignal.timeout(12_000) });
+    if (!keyResponse.ok) {
+      let body: unknown = null;
+      try {
+        body = await keyResponse.json();
+      } catch {
+        body = null;
+      }
+      return { ready: false, keyAccepted: false, problem: `OpenRouter rejected the key (status ${keyResponse.status}).`, serviceSaid: toOpenRouterError(keyResponse.status, body).detail };
+    }
+    const keyInfo = ((await keyResponse.json()) as { data?: { is_free_tier?: boolean; limit?: number | null; usage?: number } }).data ?? {};
+    const candidates = await candidateModels('openrouter', fetch);
+    return {
+      keyAccepted: true,
+      freeTierAccount: keyInfo.is_free_tier ?? null,
+      modelThatWillBeUsed: candidates[0] ?? 'NONE: no suitable free model was found',
+      backupModels: candidates.slice(1),
+      ready: candidates.length > 0,
+    };
+  }
+
+  const response = await fetch(`${GEMINI_URL}?pageSize=200`, { headers: { 'x-goog-api-key': apiKey }, signal: AbortSignal.timeout(12_000) });
+  if (!response.ok) {
+    const error = await toGeminiError(response);
+    return { ready: false, keyAccepted: false, problem: `Google rejected the key (status ${response.status}).`, serviceSaid: error.detail };
+  }
+  const data = (await response.json()) as { models?: { name?: string; supportedGenerationMethods?: string[] }[] };
+  const usable = (data.models ?? []).filter((model) => model.supportedGenerationMethods?.includes('generateContent')).map((model) => (model.name ?? '').replace(/^models\//, ''));
+  const chosen = modelsToTry('gemini').find((model) => usable.includes(model)) ?? null;
+  return {
+    keyAccepted: true,
+    modelThatWillBeUsed: chosen ?? 'NONE of the models above are available to this key',
+    someAvailableModels: usable.filter((name) => name.includes('flash')).slice(0, 8),
+    ready: Boolean(chosen),
+  };
+}
+
 /**
  * Set-up check. Open /api/chat in a browser to see whether the AI is
- * configured. It asks Google for the list of models (which costs nothing)
- * to confirm the key works. It never returns the key.
- *
- * Open /api/chat?test=1 to also send Gemini one tiny real question and
- * see exactly what comes back: the answer, how long it took, or the error.
+ * configured: which service, whether the key is accepted, which model
+ * will be used. Open /api/chat?test=1 to also send one tiny real question
+ * and see exactly what comes back: the answer, how long it took, or the error.
  */
 export async function GET(request?: Request): Promise<Response> {
-  const apiKey = process.env.GEMINI_API_KEY;
+  const provider = activeProvider();
   const report: Record<string, unknown> = {
     version: (process.env.VERCEL_GIT_COMMIT_SHA ?? 'local').slice(0, 7),
-    geminiKey: apiKey ? 'set' : 'MISSING: add GEMINI_API_KEY',
+    provider: provider ? PROVIDER_NAMES[provider] : 'NONE',
+    aiKey: provider ? 'set' : 'MISSING: add OPENROUTER_API_KEY (or GEMINI_API_KEY)',
     firebaseProjectId: firebaseProjectId() || 'MISSING: add FIREBASE_PROJECT_ID',
-    modelsTried: modelsToTry(),
   };
-  if (!apiKey) return json(200, { ...report, ready: false });
+  if (!provider) return json(200, { ...report, ready: false });
+  const apiKey = providerKey(provider);
 
   try {
-    const response = await fetch(`${GEMINI_URL}?pageSize=200`, { headers: { 'x-goog-api-key': apiKey }, signal: AbortSignal.timeout(12_000) });
-    if (!response.ok) {
-      const error = await toGeminiError(response);
-      return json(200, { ...report, ready: false, keyAccepted: false, problem: `Google rejected the key (status ${response.status}).`, googleSaid: error.detail });
-    }
-    const data = (await response.json()) as { models?: { name?: string; supportedGenerationMethods?: string[] }[] };
-    const usable = (data.models ?? []).filter((model) => model.supportedGenerationMethods?.includes('generateContent')).map((model) => (model.name ?? '').replace(/^models\//, ''));
-    const chosen = modelsToTry().find((model) => usable.includes(model)) ?? null;
-    Object.assign(report, {
-      keyAccepted: true,
-      modelThatWillBeUsed: chosen ?? 'NONE of the models above are available to this key',
-      someAvailableModels: usable.filter((name) => name.includes('flash')).slice(0, 8),
-      ready: Boolean(chosen && firebaseProjectId()),
-    });
+    Object.assign(report, await checkSetup(provider, apiKey));
   } catch (error) {
-    return json(200, { ...report, ready: false, problem: `Could not reach Google: ${error instanceof Error ? error.message : 'unknown error'}` });
+    return json(200, { ...report, ready: false, problem: `Could not reach ${PROVIDER_NAMES[provider]}: ${error instanceof Error ? error.message : 'unknown error'}` });
   }
+  report.ready = Boolean(report.ready && firebaseProjectId());
+  if (report.keyAccepted === false) return json(200, report);
 
   const wantsTest = request ? new URL(request.url).searchParams.has('test') : false;
   if (wantsTest) {
@@ -395,14 +622,14 @@ export async function GET(request?: Request): Promise<Response> {
       lastLiveTest = Date.now();
       const started = Date.now();
       try {
-        const answer = await askGeminiWithFallback({ message: 'In one short sentence, why is the sky dark in space?', history: [], passages: [], context: '' }, apiKey);
-        report.liveTest = { worked: answer !== null, seconds: (Date.now() - started) / 1000, model: workingModel, answer: answer ?? 'Gemini returned no text (blocked or empty).' };
+        const answer = await askWithFallback({ message: 'In one short sentence, why is the sky dark in space?', history: [], passages: [], context: '' }, provider, apiKey);
+        report.liveTest = { worked: answer !== null, seconds: (Date.now() - started) / 1000, model: workingModel.get(provider) ?? null, answer: answer ?? 'The AI returned no text (blocked or empty).' };
       } catch (error) {
         report.liveTest = {
           worked: false,
           seconds: (Date.now() - started) / 1000,
-          error: isTimeout(error) ? 'Every model took too long to answer.' : error instanceof GeminiError ? `Google answered ${error.status} (${error.reason || 'no reason given'})` : 'Unexpected error',
-          googleSaid: error instanceof GeminiError ? error.detail : error instanceof Error ? error.message.slice(0, 200) : '',
+          error: isTimeout(error) ? 'Every model took too long to answer.' : error instanceof AiError ? `${PROVIDER_NAMES[provider]} answered ${error.status} (${error.reason || 'no reason given'})` : 'Unexpected error',
+          serviceSaid: error instanceof AiError ? error.detail : error instanceof Error ? error.message.slice(0, 200) : '',
         };
       }
     }

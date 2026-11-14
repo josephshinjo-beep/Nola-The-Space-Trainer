@@ -26,7 +26,7 @@ let aiAvailable: boolean | null = null;
 /** Whether NOLA's last answer came from the AI, and if not, why. Shown under the chat. */
 export type AiStatus =
   | { state: 'unknown' }
-  | { state: 'connected'; model?: string }
+  | { state: 'connected'; model?: string; provider?: string }
   | { state: 'off'; reason: string }
   /** The key is set up, but the last question could not be answered by the AI. */
   | { state: 'trouble'; reason: string };
@@ -35,15 +35,18 @@ let aiStatus: AiStatus = { state: 'unknown' };
 export const getAiStatus = (): AiStatus => aiStatus;
 
 const REASONS: Record<string, string> = {
-  missing_key: 'the server has no GEMINI_API_KEY',
+  missing_key: 'the server has no OPENROUTER_API_KEY (or GEMINI_API_KEY)',
   missing_project_id: 'the server has no FIREBASE_PROJECT_ID',
-  key_rejected: 'Google rejected the Gemini API key',
-  key_not_allowed: 'Google will not let this key use Gemini',
-  model_not_found: 'none of the Gemini models are available to this key',
-  gemini_quota: 'the Gemini free quota is used up for the moment',
-  gemini_busy: 'Gemini is overloaded right now',
-  gemini_rejected_request: 'Gemini rejected the request',
-  timeout: 'Gemini took too long to answer',
+  key_rejected: 'the AI service rejected the API key',
+  key_not_allowed: 'the AI service will not let this key use the model',
+  model_not_found: 'none of the AI models could be found',
+  rate_limited: 'the free AI models are busy or rate-limited for the moment',
+  free_daily_limit: "today's free OpenRouter limit has been reached (it resets each day)",
+  privacy_settings: 'OpenRouter is blocking free models because of your account privacy settings. Allow free models at openrouter.ai/settings/privacy',
+  no_credits: 'the OpenRouter account has a negative balance',
+  ai_busy: 'the AI service is overloaded right now',
+  ai_rejected_request: 'the AI service rejected the request',
+  timeout: 'the AI took too long to answer',
 };
 
 async function explain(response: Response, isJson: boolean): Promise<string> {
@@ -51,8 +54,8 @@ async function explain(response: Response, isJson: boolean): Promise<string> {
   try {
     const body = (await response.clone().json()) as { error?: string; detail?: string; message?: string };
     const known = body.detail ? REASONS[body.detail] : undefined;
-    // Google's own explanation is the most useful thing to show when there is one.
-    if (known) return body.message ? `${known}. Google said: "${body.message}"` : known;
+    // The service's own explanation is the most useful thing to show when there is one.
+    if (known) return body.message ? `${known}. The service said: "${body.message}"` : known;
     if (body.message) return `${body.detail ?? 'error'}: "${body.message}"`;
     if (body.error === 'not_signed_in') return 'the server could not verify your login';
     if (body.error === 'slow_down') return 'too many questions in a short time';
@@ -105,10 +108,14 @@ export async function askNola({ message, history, hits, suggestions = [], contex
       return fallback;
     }
 
-    const data = (await response.json()) as { answer?: unknown; offTopic?: unknown };
+    const data = (await response.json()) as { answer?: unknown; offTopic?: unknown; provider?: unknown; model?: unknown };
     aiAvailable = true;
-    aiStatus = { state: 'connected' };
-    // Connected, but Gemini declined this one question: use the built-in answer.
+    aiStatus = {
+      state: 'connected',
+      model: typeof data.model === 'string' ? data.model : undefined,
+      provider: data.provider === 'openrouter' ? 'OpenRouter' : data.provider === 'gemini' ? 'Gemini' : undefined,
+    };
+    // Connected, but the AI declined this one question: use the built-in answer.
     if (typeof data.answer !== 'string' || !data.answer.trim()) return fallback;
     if (data.offTopic === true) return { text: data.answer.trim(), mood: 'thinking', sources: [], origin: 'ai' };
     return { text: data.answer.trim(), mood: 'happy', sources: hits.slice(0, 1).map((hit) => hit.passage.source), origin: 'ai' };
@@ -121,7 +128,8 @@ export async function askNola({ message, history, hits, suggestions = [], contex
 
 interface SetupReport {
   ready?: boolean;
-  geminiKey?: string;
+  provider?: string;
+  aiKey?: string;
   keyAccepted?: boolean;
   firebaseProjectId?: string;
   modelThatWillBeUsed?: string;
@@ -144,18 +152,19 @@ export async function checkAiSetup(): Promise<AiStatus> {
     }
     const report = (await response.json()) as SetupReport;
     if (report.ready) {
-      aiStatus = { state: 'connected', model: report.modelThatWillBeUsed };
+      aiStatus = { state: 'connected', model: report.modelThatWillBeUsed, provider: report.provider };
       return aiStatus;
     }
+    const service = report.provider && report.provider !== 'NONE' ? report.provider : 'the AI service';
     const reason =
-      report.geminiKey !== 'set'
-        ? 'no GEMINI_API_KEY was found on the server. Add it in Vercel, then redeploy'
+      report.aiKey !== 'set'
+        ? 'no AI key was found on the server. Add OPENROUTER_API_KEY in Vercel, then redeploy'
         : report.keyAccepted === false
-          ? 'Google rejected the key. Check it was copied in full, with no spaces or quote marks, then redeploy'
+          ? `${service} rejected the key. Check it was copied in full, with no spaces or quote marks, then redeploy`
           : report.keyAccepted === true && report.firebaseProjectId?.startsWith('MISSING')
             ? 'the key is fine, but the server has no Firebase project id'
             : report.keyAccepted === true
-              ? 'the key is accepted, but none of the Gemini models are available to it'
+              ? `the key is accepted, but no suitable ${service} model is available to it`
               : (report.problem ?? 'the set-up check could not be completed');
     aiAvailable = false;
     aiStatus = { state: 'off', reason };

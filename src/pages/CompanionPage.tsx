@@ -117,7 +117,10 @@ export function CompanionPage() {
       {aiStatus.state === 'connected' && (
         <p role="status" data-testid="ai-status" className="flex items-start gap-2 rounded-2xl border-2 border-go bg-go/10 px-4 py-3 font-semibold text-go">
           <CircleCheck aria-hidden="true" size={22} className="mt-0.5 shrink-0" />
-          <span>AI key is working. NOLA is answering with Gemini{aiStatus.model ? ` (${aiStatus.model})` : ''}.</span>
+          <span>
+            AI key is working. NOLA is answering with {aiStatus.provider ?? 'AI'}
+            {aiStatus.model ? ` (${aiStatus.model})` : ''}.
+          </span>
         </p>
       )}
       {aiStatus.state === 'trouble' && (

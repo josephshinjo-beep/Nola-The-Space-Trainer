@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { askGemini, askGeminiWithFallback, forgetWorkingModel, GET as chatStatus, buildUserTurn, GeminiError, OFF_TOPIC_REPLY as SERVER_OFF_TOPIC_REPLY, parseChatRequest, POST, type ChatRequest } from '../../../api/chat';
+import { askGemini, askGeminiWithFallback, askOpenRouter, askWithFallback, finishAnswer, forgetWorkingModel, pickQuietFreeModels, GET as chatStatus, buildUserTurn, GeminiError, OFF_TOPIC_REPLY as SERVER_OFF_TOPIC_REPLY, parseChatRequest, POST, type ChatRequest } from '../../../api/chat';
 import { GET, normalizeDonki } from '../../../api/space-weather';
 import { FallbackProvider, MockSpaceDataProvider, NasaDonkiProvider } from '../../data/providers';
 import { geomagneticScale, radioBlackoutScale, summarizeSpaceWeather } from '../../data/spaceWeatherModel';
@@ -190,14 +190,14 @@ describe('chat service fallback', () => {
 
   it('reports whether the AI key works, with a plain reason when it does not', async () => {
     const report = (body: unknown) => vi.stubGlobal('fetch', vi.fn(async () => Response.json(body)));
-    report({ ready: true, geminiKey: 'set', keyAccepted: true, modelThatWillBeUsed: 'gemini-2.5-flash' });
-    expect(await checkAiSetup()).toEqual({ state: 'connected', model: 'gemini-2.5-flash' });
-    report({ ready: false, geminiKey: 'MISSING: add GEMINI_API_KEY' });
-    expect(await checkAiSetup()).toMatchObject({ state: 'off', reason: expect.stringMatching(/no GEMINI_API_KEY/) });
-    report({ ready: false, geminiKey: 'set', keyAccepted: false });
-    expect(await checkAiSetup()).toMatchObject({ state: 'off', reason: expect.stringMatching(/Google rejected the key/) });
-    report({ ready: false, geminiKey: 'set', keyAccepted: true, firebaseProjectId: 'nola', modelThatWillBeUsed: 'NONE' });
-    expect(await checkAiSetup()).toMatchObject({ state: 'off', reason: expect.stringMatching(/none of the Gemini models/) });
+    report({ ready: true, provider: 'OpenRouter', aiKey: 'set', keyAccepted: true, modelThatWillBeUsed: 'recursive/flint-v1.0:free' });
+    expect(await checkAiSetup()).toEqual({ state: 'connected', model: 'recursive/flint-v1.0:free', provider: 'OpenRouter' });
+    report({ ready: false, provider: 'NONE', aiKey: 'MISSING: add OPENROUTER_API_KEY (or GEMINI_API_KEY)' });
+    expect(await checkAiSetup()).toMatchObject({ state: 'off', reason: expect.stringMatching(/no AI key was found.*OPENROUTER_API_KEY/) });
+    report({ ready: false, provider: 'OpenRouter', aiKey: 'set', keyAccepted: false });
+    expect(await checkAiSetup()).toMatchObject({ state: 'off', reason: expect.stringMatching(/OpenRouter rejected the key/) });
+    report({ ready: false, provider: 'Gemini', aiKey: 'set', keyAccepted: true, firebaseProjectId: 'nola', modelThatWillBeUsed: 'NONE' });
+    expect(await checkAiSetup()).toMatchObject({ state: 'off', reason: expect.stringMatching(/no suitable Gemini model/) });
     vi.stubGlobal('fetch', vi.fn(async () => new Response('<!doctype html>', { headers: { 'content-type': 'text/html' } })));
     expect(await checkAiSetup()).toMatchObject({ state: 'off', reason: expect.stringMatching(/no AI server/) });
     vi.stubGlobal('fetch', vi.fn(async () => Promise.reject(new Error('offline'))));
@@ -335,16 +335,118 @@ describe('AI backend (api/chat)', () => {
     });
   });
 
+  describe('OpenRouter (free models)', () => {
+    const chat: ChatRequest = { message: 'Why is space dark?', history: [{ role: 'user', content: 'Hi' }, { role: 'assistant', content: 'Hello!' }], passages: [], context: '' };
+    const okReply = (content: string | null, finish = 'stop') => ({ choices: [{ message: { content }, finish_reason: finish }] });
+    const LIST = { data: [
+      { id: 'inclusionai/ling-3.2-flash:free', context_length: 1_000_000, pricing: { prompt: '0', completion: '0' }, architecture: { input_modalities: ['text'], output_modalities: ['text'] } },
+      { id: 'recursive/flint-v1.0:free', context_length: 262_144, pricing: { prompt: '0', completion: '0' }, architecture: { input_modalities: ['text'], output_modalities: ['text'] } },
+      { id: 'quiet-lab/helper-9:free', context_length: 128_000, pricing: { prompt: '0', completion: '0' }, architecture: { input_modalities: ['text'], output_modalities: ['text'] } },
+      { id: 'quiet-lab/helper-10:free', context_length: 128_000, pricing: { prompt: '0', completion: '0' }, architecture: { input_modalities: ['text'], output_modalities: ['text'] } },
+      { id: 'google/gemma-4-31b-it:free', context_length: 262_144, pricing: { prompt: '0', completion: '0' }, architecture: { input_modalities: ['text'], output_modalities: ['text'] } },
+      { id: 'openrouter/free', context_length: 200_000, pricing: { prompt: '0', completion: '0' }, architecture: { input_modalities: ['text'], output_modalities: ['text'] } },
+      { id: 'liquid/lfm-3-1.7b:free', context_length: 262_144, pricing: { prompt: '0', completion: '0' }, architecture: { input_modalities: ['text'], output_modalities: ['text'] } },
+      { id: 'cohere/north-mini-code:free', context_length: 256_000, pricing: { prompt: '0', completion: '0' }, architecture: { input_modalities: ['text'], output_modalities: ['text'] } },
+      { id: 'google/lyria-3-pro-preview', context_length: 1_000_000, pricing: { prompt: '0', completion: '0' }, architecture: { input_modalities: ['text'], output_modalities: ['text', 'audio'] } },
+      { id: 'quiet-lab/paid-model', context_length: 128_000, pricing: { prompt: '0.000001', completion: '0.000002' }, architecture: { input_modalities: ['text'], output_modalities: ['text'] } },
+    ] };
+
+    it('picks only quiet, free, text-chat models', () => {
+      expect(pickQuietFreeModels(LIST.data)).toEqual(['inclusionai/ling-3.2-flash:free', 'recursive/flint-v1.0:free', 'quiet-lab/helper-9:free', 'quiet-lab/helper-10:free']);
+    });
+
+    it('sends the rules and conversation in the OpenAI-style format, with no tools', async () => {
+      const fetcher = vi.fn(async () => Response.json(okReply('Space is dark because it is mostly empty.'))) as unknown as typeof fetch;
+      expect(await askOpenRouter(chat, 'or-secret', 'recursive/flint-v1.0:free', fetcher)).toBe('Space is dark because it is mostly empty.');
+      const [url, init] = (fetcher as unknown as { mock: { calls: [string, RequestInit][] } }).mock.calls[0]!;
+      expect(url).toBe('https://openrouter.ai/api/v1/chat/completions');
+      expect((init.headers as Record<string, string>).Authorization).toBe('Bearer or-secret');
+      const sent = JSON.parse(init.body as string);
+      expect(sent.model).toBe('recursive/flint-v1.0:free');
+      expect(sent.messages.map((m: { role: string }) => m.role)).toEqual(['system', 'user', 'assistant', 'user']);
+      expect(sent.messages[0].content).toMatch(/YOUR ONE STRICT RULE/);
+      expect(sent.messages[3].content).toContain('<student_message>\nWhy is space dark?');
+      expect(sent.reasoning).toEqual({ effort: 'low', exclude: true });
+      expect(sent.tools).toBeUndefined();
+    });
+
+    it('cleans replies: hidden thinking, markdown and the off-topic marker', async () => {
+      expect(finishAnswer('<think>let me see</think>**Mars** is red.')).toBe('Mars is red.');
+      expect(finishAnswer('## Answer\nMars is red.')).toBe('Answer\nMars is red.');
+      expect(finishAnswer('<think>never finished')).toBeNull();
+      const marker = vi.fn(async () => Response.json(okReply('OFF_TOPIC'))) as unknown as typeof fetch;
+      expect(await askOpenRouter(chat, 'k', 'm', marker)).toBe(SERVER_OFF_TOPIC_REPLY);
+      const filtered = vi.fn(async () => Response.json(okReply('', 'content_filter'))) as unknown as typeof fetch;
+      expect(await askOpenRouter(chat, 'k', 'm', filtered)).toBeNull();
+    });
+
+    it('skips missing, busy, empty or slow models and uses the next free one', async () => {
+      vi.stubEnv('OPENROUTER_MODEL', '');
+      const asked: string[] = [];
+      const fetcher = (async (url: string, init?: RequestInit) => {
+        if (String(url).endsWith('/models')) return Response.json(LIST);
+        const model = JSON.parse(init!.body as string).model as string;
+        asked.push(model);
+        if (asked.length === 1) return Response.json({ error: { code: 429, message: 'ling is temporarily rate-limited upstream' } }, { status: 429 });
+        if (asked.length === 2) return Response.json(okReply(null));
+        if (asked.length === 3) throw Object.assign(new Error('timed out'), { name: 'TimeoutError' });
+        return Response.json(okReply('Answer from a quiet model.'));
+      }) as unknown as typeof fetch;
+      expect(await askWithFallback(chat, 'openrouter', 'k', fetcher, () => 0)).toBe('Answer from a quiet model.');
+      expect(asked[0]).toBe('inclusionai/ling-3.2-flash:free');
+      expect(asked.every((model) => model.endsWith(':free'))).toBe(true);
+      expect(asked.some((model) => model.startsWith('google/') || model === 'openrouter/free')).toBe(false);
+    });
+
+    it('stops at once for account problems another model cannot fix', async () => {
+      for (const [status, message, reason] of [
+        [404, 'No endpoints found matching your data policy (Free model training)', 'DATA_POLICY'],
+        [429, 'Rate limit exceeded: free-models-per-day. Add 10 credits to unlock 1000 free model requests per day', 'FREE_DAILY_LIMIT'],
+        [401, 'No auth credentials found', 'API_KEY_INVALID'],
+        [402, 'Insufficient credits', 'NO_CREDITS'],
+      ] as const) {
+        forgetWorkingModel();
+        let calls = 0;
+        const fetcher = (async (url: string) => {
+          if (String(url).endsWith('/models')) return Response.json(LIST);
+          calls += 1;
+          return Response.json({ error: { code: status, message } }, { status });
+        }) as unknown as typeof fetch;
+        await expect(askWithFallback(chat, 'openrouter', 'k', fetcher), reason).rejects.toMatchObject({ status, reason });
+        expect(calls, reason).toBe(1);
+      }
+    });
+
+    it('treats an error sent with status 200 as an error', async () => {
+      const fetcher = vi.fn(async () => Response.json({ error: { code: 503, message: 'Provider returned error' } })) as unknown as typeof fetch;
+      await expect(askOpenRouter(chat, 'k', 'm', fetcher)).rejects.toMatchObject({ status: 503 });
+    });
+
+    it('uses OpenRouter when its key is set, even if a Gemini key is also set', async () => {
+      vi.stubEnv('OPENROUTER_API_KEY', 'or-key');
+      vi.stubEnv('GEMINI_API_KEY', 'gem-key');
+      vi.stubEnv('VITE_FIREBASE_PROJECT_ID', 'demo-project');
+      vi.stubGlobal('fetch', vi.fn(async (url: string) => (String(url).endsWith('/key') ? Response.json({ data: { is_free_tier: true } }) : Response.json(LIST))));
+      const text = await (await chatStatus()).text();
+      expect(JSON.parse(text)).toMatchObject({ provider: 'OpenRouter', aiKey: 'set', keyAccepted: true, freeTierAccount: true, ready: true, modelThatWillBeUsed: 'inclusionai/ling-3.2-flash:free' });
+      expect(text).not.toContain('or-key');
+      vi.stubGlobal('fetch', vi.fn(async () => Response.json({ error: { code: 401, message: 'User not found.' } }, { status: 401 })));
+      expect(await (await chatStatus()).json()).toMatchObject({ ready: false, keyAccepted: false, serviceSaid: expect.stringMatching(/User not found/) });
+    });
+  });
+
   describe('set-up check (GET /api/chat)', () => {
     it('says what is missing without calling Google', async () => {
+      vi.stubEnv('OPENROUTER_API_KEY', '');
       vi.stubEnv('GEMINI_API_KEY', '');
       const fetchMock = vi.fn();
       vi.stubGlobal('fetch', fetchMock);
-      expect(await (await chatStatus()).json()).toMatchObject({ ready: false, geminiKey: expect.stringMatching(/MISSING/) });
+      expect(await (await chatStatus()).json()).toMatchObject({ ready: false, aiKey: expect.stringMatching(/MISSING/) });
       expect(fetchMock).not.toHaveBeenCalled();
     });
 
     it('confirms the key and names the model, and never returns the key', async () => {
+      vi.stubEnv('OPENROUTER_API_KEY', '');
       vi.stubEnv('GEMINI_API_KEY', 'super-secret');
       vi.stubEnv('VITE_FIREBASE_PROJECT_ID', 'demo-project');
       vi.stubGlobal('fetch', vi.fn(async () => Response.json({ models: [{ name: 'models/gemini-flash-latest', supportedGenerationMethods: ['generateContent'] }, { name: 'models/embedding-1', supportedGenerationMethods: ['embedContent'] }] })));
@@ -357,12 +459,14 @@ describe('AI backend (api/chat)', () => {
   });
 
   it('reports "unavailable" when no AI key is configured', async () => {
+    vi.stubEnv('OPENROUTER_API_KEY', '');
     vi.stubEnv('GEMINI_API_KEY', '');
     const response = await POST(new Request('https://example.test/api/chat', { method: 'POST', body: '{}' }));
     expect(response.status).toBe(503);
   });
 
   it('rejects callers who are not signed in', async () => {
+    vi.stubEnv('OPENROUTER_API_KEY', '');
     vi.stubEnv('GEMINI_API_KEY', 'test-key');
     vi.stubEnv('FIREBASE_PROJECT_ID', 'demo-project');
     const noToken = await POST(new Request('https://example.test/api/chat', { method: 'POST', body: JSON.stringify({ message: 'hi' }) }));

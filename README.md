@@ -51,9 +51,9 @@ npm run dev
 
 Open the address it prints (usually http://localhost:5173).
 
-The two server functions in `api/` also run under `npm run dev`. To use the AI chat locally, add `GEMINI_API_KEY=your-key` to `.env.local` and restart the dev server. Without a key, NOLA uses its built-in answers.
+The two server functions in `api/` also run under `npm run dev`. To use the AI chat locally, add `OPENROUTER_API_KEY=your-key` (or `GEMINI_API_KEY=your-key`) to `.env.local` and restart the dev server. Without a key, NOLA uses its built-in answers.
 
-**Checking the AI set-up:** open `/api/chat?test=1` to also send Gemini one tiny real question and see the answer, the time it took, or Google's exact error. Open `/api/chat` in a browser (for example http://localhost:5173/api/chat, or the same path on your deployed site). It reports whether the key is set, whether Google accepts it and which model will be used. It never shows the key. The Ask NOLA page shows the app version at the bottom, so you can check the site is running the latest code. The page also shows a line under the chat saying whether the AI is connected and, if not, why.
+**Checking the AI set-up:** open `/api/chat?test=1` to also send the AI one tiny real question and see the answer, the model, the time it took, or the service's exact error. Open `/api/chat` in a browser (for example http://localhost:5173/api/chat, or the same path on your deployed site). It reports whether the key is set, whether Google accepts it and which model will be used. It never shows the key. The Ask NOLA page shows the app version at the bottom, so you can check the site is running the latest code. The page also shows a line under the chat saying whether the AI is connected and, if not, why.
 
 ### One-time Firebase console setup
 
@@ -82,8 +82,10 @@ Vercel hosts the website and runs the two small server functions in `api/`.
 |---|---|---|
 | `VITE_FIREBASE_API_KEY` and the other five `VITE_FIREBASE_*` values | The app | Same values as `.env.local` |
 | `FIREBASE_PROJECT_ID` | AI chat (optional) | Only needed if it differs from `VITE_FIREBASE_PROJECT_ID`, which is used by default |
-| `GEMINI_API_KEY` | AI chat | Secret. Create one in [Google AI Studio](https://aistudio.google.com/apikey). Without it NOLA uses built-in answers only |
-| `AI_MODEL` | AI chat (optional) | A Gemini model name to try first. Otherwise `gemini-3.8-flash` is tried first, then `gemini-2.5-flash`, `gemini-2.5-flash-lite`, `gemini-flash-latest` and `gemini-2.0-flash` as backups |
+| `OPENROUTER_API_KEY` | AI chat | Secret. Create one at [openrouter.ai/keys](https://openrouter.ai/keys). NOLA then uses OpenRouter's **free** models only. Takes priority over a Gemini key |
+| `OPENROUTER_MODEL` | AI chat (optional) | One free model id, or several separated by commas, to try first. Otherwise a few quiet free models are tried in turn (see `api/chat.ts`), and if those are gone the server picks quiet free models from OpenRouter's current list |
+| `GEMINI_API_KEY` | AI chat (alternative) | Secret, from [Google AI Studio](https://aistudio.google.com/apikey). Used only when no OpenRouter key is set |
+| `AI_MODEL` | AI chat (optional) | A Gemini model name to try first when using Gemini |
 | `VITE_SPACE_DATA_SOURCE` | Real NASA data (optional) | Set to `nasa` to use NASA data; leave unset for simulated data |
 | `NASA_API_KEY` | Real NASA data (optional) | Free from [api.nasa.gov](https://api.nasa.gov). Without it NASA's low-limit `DEMO_KEY` is used |
 
@@ -103,7 +105,7 @@ After changing a variable in Vercel you must **redeploy**: existing deployments 
 - **Phaser 3** – the 2D game. Downloaded only when the Mission page is opened.
 - **Firebase Authentication + Cloud Firestore** – accounts and each student's data.
 - **Vercel functions** – two small server programs: the AI chat and the NASA data fetch.
-- **Google Gemini API** – the optional AI model behind NOLA's chat.
+- **OpenRouter (free models) or Google Gemini** – the optional AI model behind NOLA's chat, called only from the server.
 - **Vitest** – unit tests.
 - **Self-hosted fonts** (Fredoka, Nunito, Lexend) and the **browser's own speech voice** for read-aloud, so a children's app sends nothing to font or speech services.
 
@@ -206,7 +208,9 @@ Safety measures:
 - Only signed-in students can use the AI; the server verifies their Firebase login.
 - NOLA's rules (age-appropriate, never ask for personal details) are fixed on the server.
 - **Space only.** NOLA answers questions about space, NASA, the Academy modules and this app. Anything else gets one fixed reply asking for a space question. The model signals an off-topic question with a marker word and the server substitutes the fixed reply, so the wording is always the same.
-- Gemini's safety filters are set to their strictest level.
+- With Gemini, Google's safety filters are set to their strictest level. OpenRouter's free models have no equivalent setting, so with OpenRouter the protection is NOLA's server-side rules, the space-only marker and the size limits.
+- **Free models only, and not the busiest ones.** With OpenRouter, NOLA uses only models marked free, and avoids the big-brand free models and OpenRouter's own free router, which are heavily used and often rate-limited. Free models come and go; if the listed ones disappear, the server picks quiet free models from OpenRouter's live list.
+- **OpenRouter privacy setting.** Many free models are only available if your OpenRouter account allows providers that may store or train on prompts (openrouter.ai/settings/privacy). If that is off, the chat shows a message saying so. For a children's app, weigh this: NOLA never sends messages that look like personal details, but questions themselves are sent.
 - The AI has no tools. It can only return text.
 - Messages that look like personal details, and questions about the student's own station ("what should I do next?"), are answered by the built-in brain and never sent to the AI.
 - Size limits on every field, and a per-student rate limit.
@@ -214,7 +218,7 @@ Safety measures:
 
 Known limits: the rate limit is kept in server memory, so it is a first defence, not a guarantee; set a quota or budget on the key in your Google account. The lesson passages are chosen in the browser and sent with the question; a student who tampers with them can only affect their own answer. Moving the search to the server with a vector database is the natural upgrade if the knowledge base grows beyond the lessons.
 
-**Status:** the request checks, the sign-in check, the request sent to Gemini, the off-topic handling and every fallback path are unit-tested against simulated Gemini responses. The call to the real Gemini service has not been run, because no API key was available during the build. Test it once after adding `GEMINI_API_KEY`.
+**Status:** the request checks, the sign-in check, the request sent to Gemini, the off-topic handling and every fallback path are unit-tested against simulated Gemini and OpenRouter responses. The call to the real Gemini service has not been run, because no API key was available during the build. Test it once after adding `GEMINI_API_KEY`.
 
 ## Accessibility
 
