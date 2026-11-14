@@ -21,6 +21,36 @@ interface AskOptions {
  */
 let aiAvailable: boolean | null = null;
 
+/** Whether NOLA's last answer came from the AI, and if not, why. Shown under the chat. */
+export type AiStatus =
+  | { state: 'unknown' }
+  | { state: 'connected' }
+  | { state: 'off'; reason: string };
+
+let aiStatus: AiStatus = { state: 'unknown' };
+export const getAiStatus = (): AiStatus => aiStatus;
+
+const REASONS: Record<string, string> = {
+  missing_key: 'the server has no GEMINI_API_KEY',
+  missing_project_id: 'the server has no FIREBASE_PROJECT_ID',
+  key_rejected: 'Google rejected the Gemini API key',
+  model_not_found: 'none of the Gemini models are available to this key',
+  gemini_quota: 'the Gemini quota is used up for now',
+};
+
+async function explain(response: Response, isJson: boolean): Promise<string> {
+  if (!isJson) return 'there is no AI server at this address';
+  try {
+    const body = (await response.clone().json()) as { error?: string; detail?: string };
+    if (body.detail && REASONS[body.detail]) return REASONS[body.detail]!;
+    if (body.error === 'not_signed_in') return 'the server could not verify your login';
+    if (body.error === 'slow_down') return 'too many questions in a short time';
+    return `the AI server answered with an error (${body.detail ?? body.error ?? response.status})`;
+  } catch {
+    return `the AI server answered with status ${response.status}`;
+  }
+}
+
 /** Messages the built-in brain always handles itself, for safety and for accurate game facts. */
 const KEEP_LOCAL = /\b(hint|stuck|what (should|do) i do|what next|what now|next step|how is my (station|crew)|station status)\b|\b\d{7,}\b|[\w.+-]+@[\w-]+\.[a-z]{2,}|\bmy (home )?address\b|\bmy password\b|\bmy phone\b/i;
 
@@ -55,17 +85,24 @@ export async function askNola({ message, history, hits, context, getToken }: Ask
     // No backend here (for example plain local development), or the AI key is not set.
     if (!isJson || response.status === 404 || response.status === 503) {
       aiAvailable = false;
+      aiStatus = { state: 'off', reason: await explain(response, isJson) };
       return fallback;
     }
-    if (!response.ok) return fallback;
+    if (!response.ok) {
+      aiStatus = { state: 'off', reason: await explain(response, isJson) };
+      return fallback;
+    }
 
     const data = (await response.json()) as { answer?: unknown; offTopic?: unknown };
-    if (typeof data.answer !== 'string' || !data.answer.trim()) return fallback;
     aiAvailable = true;
+    aiStatus = { state: 'connected' };
+    // Connected, but Gemini declined this one question: use the built-in answer.
+    if (typeof data.answer !== 'string' || !data.answer.trim()) return fallback;
     if (data.offTopic === true) return { text: data.answer.trim(), mood: 'thinking', sources: [], origin: 'ai' };
     return { text: data.answer.trim(), mood: 'happy', sources: hits.slice(0, 2).map((hit) => hit.passage.source), origin: 'ai' };
   } catch (error) {
     console.warn('AI chat unavailable, using built-in answers.', error);
+    aiStatus = { state: 'off', reason: 'the AI server could not be reached' };
     return fallback;
   }
 }
@@ -73,4 +110,5 @@ export async function askNola({ message, history, hits, context, getToken }: Ask
 /** For tests. */
 export function resetAiAvailability(): void {
   aiAvailable = null;
+  aiStatus = { state: 'unknown' };
 }

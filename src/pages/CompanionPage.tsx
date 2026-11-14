@@ -5,7 +5,7 @@ import { Button } from '../components/Button';
 import { ReadAloudButton } from '../features/accessibility/ReadAloudButton';
 import { useAcademyProgress } from '../features/academy/AcademyProgressContext';
 import { useAuth } from '../features/auth/AuthContext';
-import { askNola, type ChatTurn } from '../features/companion/chatService';
+import { askNola, getAiStatus, type AiStatus, type ChatTurn } from '../features/companion/chatService';
 import { loadKnowledge, searchKnowledge, type Passage } from '../features/companion/knowledge';
 import { NolaMascot, type NolaMood } from '../features/companion/NolaMascot';
 import { buildContext, SUGGESTED_QUESTIONS, type Reply } from '../features/companion/responder';
@@ -30,6 +30,7 @@ export function CompanionPage() {
   const [messages, setMessages] = useState<Message[]>([{ id: 0, from: 'nola', reply: WELCOME }]);
   const [draft, setDraft] = useState('');
   const [thinking, setThinking] = useState(false);
+  const [aiStatus, setAiStatus] = useState<AiStatus>(getAiStatus);
   const [knowledge, setKnowledge] = useState<Passage[]>([]);
   // The saved station, loaded once. Kept as a promise so a question asked
   // straight away waits for it instead of answering without it.
@@ -74,6 +75,7 @@ export function CompanionPage() {
       getToken: async () => (user ? user.getIdToken() : null),
     });
     setMessages((list) => [...list, { id: nextId.current++, from: 'nola', reply }]);
+    setAiStatus(getAiStatus());
     setThinking(false);
   }
 
@@ -168,6 +170,12 @@ export function CompanionPage() {
           <Send aria-hidden="true" size={20} /> Send
         </Button>
       </form>
+
+      {aiStatus.state !== 'unknown' && (
+        <p className="text-sm text-mist" data-testid="ai-status">
+          {aiStatus.state === 'connected' ? "NOLA's AI is connected." : `NOLA's AI is not connected (${aiStatus.reason}), so NOLA is using built-in answers.`}
+        </p>
+      )}
 
       <p className="flex items-start gap-2 text-base text-mist">
         <ShieldCheck aria-hidden="true" size={20} className="mt-0.5 shrink-0 text-glow" />

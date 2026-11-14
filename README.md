@@ -51,7 +51,9 @@ npm run dev
 
 Open the address it prints (usually http://localhost:5173).
 
-In local development the AI chat and NASA data are not running (they are server functions; see below), so NOLA uses its built-in answers and the game uses simulated space weather. Everything else works.
+The two server functions in `api/` also run under `npm run dev`. To use the AI chat locally, add `GEMINI_API_KEY=your-key` to `.env.local` and restart the dev server. Without a key, NOLA uses its built-in answers.
+
+**Checking the AI set-up:** open `/api/chat` in a browser (for example http://localhost:5173/api/chat, or the same path on your deployed site). It reports whether the key is set, whether Google accepts it and which model will be used. It never shows the key. The Ask NOLA page also shows a line under the chat saying whether the AI is connected and, if not, why.
 
 ### One-time Firebase console setup
 
@@ -79,9 +81,9 @@ Vercel hosts the website and runs the two small server functions in `api/`.
 | Variable | Needed for | Notes |
 |---|---|---|
 | `VITE_FIREBASE_API_KEY` and the other five `VITE_FIREBASE_*` values | The app | Same values as `.env.local` |
-| `FIREBASE_PROJECT_ID` | AI chat | Your Firebase project id (for example `nola-space-trainer`). Lets the server check who is asking |
+| `FIREBASE_PROJECT_ID` | AI chat (optional) | Only needed if it differs from `VITE_FIREBASE_PROJECT_ID`, which is used by default |
 | `GEMINI_API_KEY` | AI chat | Secret. Create one in [Google AI Studio](https://aistudio.google.com/apikey). Without it NOLA uses built-in answers only |
-| `AI_MODEL` | AI chat (optional) | Defaults to `gemini-2.5-flash`. Set this if Google renames or retires that model |
+| `AI_MODEL` | AI chat (optional) | A Gemini model name to try first. Otherwise `gemini-2.5-flash`, `gemini-flash-latest` and `gemini-2.0-flash` are tried in turn |
 | `VITE_SPACE_DATA_SOURCE` | Real NASA data (optional) | Set to `nasa` to use NASA data; leave unset for simulated data |
 | `NASA_API_KEY` | Real NASA data (optional) | Free from [api.nasa.gov](https://api.nasa.gov). Without it NASA's low-limit `DEMO_KEY` is used |
 
@@ -90,7 +92,7 @@ Vercel hosts the website and runs the two small server functions in `api/`.
 
 Variables that start with `VITE_` are built into the website and are visible to anyone. The others stay on the server. Never put a secret in a `VITE_` variable.
 
-To run the server functions on your own computer, use the Vercel CLI (`npx vercel dev`) with the same variables.
+After changing a variable in Vercel you must **redeploy**: existing deployments keep the old values.
 
 ## How it is built
 

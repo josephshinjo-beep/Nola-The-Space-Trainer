@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { askGemini, buildUserTurn, GeminiError, OFF_TOPIC_REPLY as SERVER_OFF_TOPIC_REPLY, parseChatRequest, POST, type ChatRequest } from '../../../api/chat';
+import { askGemini, askGeminiWithFallback, GET as chatStatus, buildUserTurn, GeminiError, OFF_TOPIC_REPLY as SERVER_OFF_TOPIC_REPLY, parseChatRequest, POST, type ChatRequest } from '../../../api/chat';
 import { GET, normalizeDonki } from '../../../api/space-weather';
 import { FallbackProvider, MockSpaceDataProvider, NasaDonkiProvider } from '../../data/providers';
 import { geomagneticScale, radioBlackoutScale, summarizeSpaceWeather } from '../../data/spaceWeatherModel';
@@ -190,6 +190,39 @@ describe('AI backend (api/chat)', () => {
       expect(await askGemini(chat, 'k', 'm', gemini(reply('   ')))).toBeNull();
       expect(await askGemini(chat, 'k', 'm', gemini({}))).toBeNull();
       await expect(askGemini(chat, 'k', 'm', gemini({ error: {} }, 429))).rejects.toBeInstanceOf(GeminiError);
+    });
+
+    it('moves on to the next model name when one is not found', async () => {
+      const seen: string[] = [];
+      const fetcher = (async (url: string) => {
+        seen.push(String(url).split('/models/')[1]!.split(':')[0]!);
+        return seen.length < 2 ? Response.json({}, { status: 404 }) : Response.json(reply('Hello from the second model.'));
+      }) as unknown as typeof fetch;
+      expect(await askGeminiWithFallback(chat, 'k', fetcher)).toBe('Hello from the second model.');
+      expect(seen).toEqual(['gemini-2.5-flash', 'gemini-flash-latest']);
+      // A rejected key is reported at once, not retried on other models.
+      await expect(askGeminiWithFallback(chat, 'k', gemini({}, 403))).rejects.toMatchObject({ status: 403 });
+    });
+  });
+
+  describe('set-up check (GET /api/chat)', () => {
+    it('says what is missing without calling Google', async () => {
+      vi.stubEnv('GEMINI_API_KEY', '');
+      const fetchMock = vi.fn();
+      vi.stubGlobal('fetch', fetchMock);
+      expect(await (await chatStatus()).json()).toMatchObject({ ready: false, geminiKey: expect.stringMatching(/MISSING/) });
+      expect(fetchMock).not.toHaveBeenCalled();
+    });
+
+    it('confirms the key and names the model, and never returns the key', async () => {
+      vi.stubEnv('GEMINI_API_KEY', 'super-secret');
+      vi.stubEnv('VITE_FIREBASE_PROJECT_ID', 'demo-project');
+      vi.stubGlobal('fetch', vi.fn(async () => Response.json({ models: [{ name: 'models/gemini-flash-latest', supportedGenerationMethods: ['generateContent'] }, { name: 'models/embedding-1', supportedGenerationMethods: ['embedContent'] }] })));
+      const text = await (await chatStatus()).text();
+      expect(JSON.parse(text)).toMatchObject({ ready: true, keyAccepted: true, modelThatWillBeUsed: 'gemini-flash-latest', firebaseProjectId: 'demo-project' });
+      expect(text).not.toContain('super-secret');
+      vi.stubGlobal('fetch', vi.fn(async () => Response.json({}, { status: 400 })));
+      expect(await (await chatStatus()).json()).toMatchObject({ ready: false, keyAccepted: false });
     });
   });
 

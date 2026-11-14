@@ -17,14 +17,31 @@ import { createRemoteJWKSet, jwtVerify } from 'jose';
  *
  * Server settings (Vercel → Project → Settings → Environment Variables):
  *   GEMINI_API_KEY       required to switch the AI on (from Google AI Studio)
- *   FIREBASE_PROJECT_ID  required; the Firebase project whose students may use it
- *   AI_MODEL             optional; defaults to the model named below
+ *   FIREBASE_PROJECT_ID  optional; defaults to VITE_FIREBASE_PROJECT_ID
+ *   AI_MODEL             optional; tried first, before the models listed below
+ *
+ * To check the set-up, open /api/chat in a browser: it reports what is
+ * configured and whether Google accepts the key (never the key itself).
  */
 
 export const maxDuration = 30;
 
-/** Change with the AI_MODEL setting if Google retires or renames this model. */
-const DEFAULT_MODEL = 'gemini-2.5-flash';
+/**
+ * Models to try, in order. Google renames and retires models, so if one is
+ * not found the next is tried. AI_MODEL, when set, goes first.
+ */
+const MODEL_CHOICES = ['gemini-2.5-flash', 'gemini-flash-latest', 'gemini-2.0-flash'];
+
+function modelsToTry(): string[] {
+  const preferred = process.env.AI_MODEL?.trim();
+  return [...new Set(preferred ? [preferred, ...MODEL_CHOICES] : MODEL_CHOICES)];
+}
+
+/** The Firebase project whose students may use the AI. */
+const firebaseProjectId = () => process.env.FIREBASE_PROJECT_ID || process.env.VITE_FIREBASE_PROJECT_ID || '';
+
+/** Remembers which model worked, so later requests go straight to it. */
+let workingModel: string | null = null;
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 /** The one reply NOLA gives to anything that is not about space, NASA, the lessons or the app. */
@@ -214,10 +231,31 @@ export async function askGemini(chat: ChatRequest, apiKey: string, model: string
   return answer;
 }
 
+/** Tries each model in turn until one exists. Any other failure is reported at once. */
+export async function askGeminiWithFallback(chat: ChatRequest, apiKey: string, fetcher: typeof fetch = fetch): Promise<string | null> {
+  const candidates = workingModel ? [workingModel, ...modelsToTry().filter((model) => model !== workingModel)] : modelsToTry();
+  let lastError: unknown = new GeminiError(404);
+  for (const model of candidates) {
+    try {
+      const answer = await askGemini(chat, apiKey, model, fetcher);
+      workingModel = model;
+      return answer;
+    } catch (error) {
+      lastError = error;
+      // 404 means "no such model": try the next name. Anything else is a real failure.
+      if (!(error instanceof GeminiError) || error.status !== 404) throw error;
+      console.warn(`Gemini model "${model}" was not found; trying the next one.`);
+      if (workingModel === model) workingModel = null;
+    }
+  }
+  throw lastError;
+}
+
 export async function POST(request: Request): Promise<Response> {
   const apiKey = process.env.GEMINI_API_KEY;
-  const projectId = process.env.FIREBASE_PROJECT_ID;
-  if (!apiKey || !projectId) return json(503, { error: 'ai_unavailable' });
+  const projectId = firebaseProjectId();
+  if (!apiKey) return json(503, { error: 'ai_unavailable', detail: 'missing_key' });
+  if (!projectId) return json(503, { error: 'ai_unavailable', detail: 'missing_project_id' });
 
   const uid = await verifyStudent(request, projectId);
   if (!uid) return json(401, { error: 'not_signed_in' });
@@ -232,20 +270,52 @@ export async function POST(request: Request): Promise<Response> {
   if (!chat) return json(400, { error: 'bad_request' });
 
   try {
-    const answer = await askGemini(chat, apiKey, process.env.AI_MODEL || DEFAULT_MODEL);
+    const answer = await askGeminiWithFallback(chat, apiKey);
     if (answer === null) return json(200, { answer: null, reason: 'declined' });
     return json(200, { answer, offTopic: answer === OFF_TOPIC_REPLY });
   } catch (error) {
     if (error instanceof GeminiError) {
-      if (error.status === 429) return json(429, { error: 'slow_down' });
-      if (error.status === 401 || error.status === 403) {
-        console.error('The GEMINI_API_KEY was rejected.');
-        return json(503, { error: 'ai_unavailable' });
-      }
-      console.error(`AI request failed with status ${error.status}.`);
-      return json(502, { error: 'ai_failed' });
+      console.error(`Gemini request failed with status ${error.status}.`);
+      if (error.status === 429) return json(429, { error: 'slow_down', detail: 'gemini_quota' });
+      if (error.status === 400 || error.status === 401 || error.status === 403) return json(503, { error: 'ai_unavailable', detail: 'key_rejected' });
+      if (error.status === 404) return json(503, { error: 'ai_unavailable', detail: 'model_not_found' });
+      return json(502, { error: 'ai_failed', detail: `gemini_${error.status}` });
     }
     console.error('Unexpected chat error', error);
-    return json(500, { error: 'ai_failed' });
+    return json(502, { error: 'ai_failed', detail: 'unexpected' });
+  }
+}
+
+/**
+ * Set-up check. Open /api/chat in a browser to see whether the AI is
+ * configured. It asks Google for the list of models (which costs nothing)
+ * to confirm the key works. It never returns the key.
+ */
+export async function GET(): Promise<Response> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  const report: Record<string, unknown> = {
+    geminiKey: apiKey ? 'set' : 'MISSING: add GEMINI_API_KEY',
+    firebaseProjectId: firebaseProjectId() || 'MISSING: add FIREBASE_PROJECT_ID',
+    modelsTried: modelsToTry(),
+  };
+  if (!apiKey) return json(200, { ...report, ready: false });
+
+  try {
+    const response = await fetch(`${GEMINI_URL}?pageSize=200`, { headers: { 'x-goog-api-key': apiKey }, signal: AbortSignal.timeout(12_000) });
+    if (!response.ok) {
+      return json(200, { ...report, ready: false, keyAccepted: false, problem: `Google rejected the key (status ${response.status}). Check it was copied in full, with no spaces or quote marks.` });
+    }
+    const data = (await response.json()) as { models?: { name?: string; supportedGenerationMethods?: string[] }[] };
+    const usable = (data.models ?? []).filter((model) => model.supportedGenerationMethods?.includes('generateContent')).map((model) => (model.name ?? '').replace(/^models\//, ''));
+    const chosen = modelsToTry().find((model) => usable.includes(model)) ?? null;
+    return json(200, {
+      ...report,
+      keyAccepted: true,
+      modelThatWillBeUsed: chosen ?? 'NONE of the models above are available to this key',
+      someAvailableModels: usable.filter((name) => name.includes('flash')).slice(0, 8),
+      ready: Boolean(chosen && firebaseProjectId()),
+    });
+  } catch (error) {
+    return json(200, { ...report, ready: false, problem: `Could not reach Google: ${error instanceof Error ? error.message : 'unknown error'}` });
   }
 }
