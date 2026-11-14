@@ -61,7 +61,10 @@ const GEMINI_MODELS = ['gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-2.5-flash
  * Free models come and go, so if none of these exist any more, the server
  * looks up OpenRouter's current free list and picks quiet ones from it.
  */
-const OPENROUTER_FREE_MODELS = ['inclusionai/ling-3.2-flash:free', 'thinkingmachines/inkling-2-small:free', 'recursive/flint-v1.0:free', 'baidu/ernie-5.5-flash-preview:free'];
+const OPENROUTER_FREE_MODELS = ['baidu/ernie-5.5-flash-preview:free', 'particle-ai/particle-1:free', 'inclusionai/ling-3.2-flash:free'];
+// Tested November 2026 with "Which is bigger, Earth or Mars?": all three answered correctly
+// in 1-4 seconds. Not used: thinkingmachines/inkling-2-small:free (refuses ordinary apps)
+// and recursive/flint-v1.0:free (fast, but called Mars "a giant planet").
 
 /** How long to wait for one model before moving on to the next. Free models are slower. */
 const MODEL_TIMEOUT_MS: Record<Provider, number> = { openrouter: 12_000, gemini: 9_000 };
@@ -91,6 +94,7 @@ const workingModel = new Map<Provider, string>();
 /** For tests. */
 export function forgetWorkingModel(): void {
   workingModel.clear();
+  refusedModels.clear();
   freeModelCache = null;
 }
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
@@ -340,6 +344,8 @@ interface OpenRouterModel {
 
 /** Big-brand or router models that are free but very busy, so often rate-limited. */
 const BUSY_FREE_MODEL = /^(openrouter|google|nvidia|meta-llama|deepseek|qwen|openai|mistralai|moonshotai|z-ai|x-ai|anthropic|microsoft)\//;
+/** Free models tested and rejected: one refuses ordinary apps, one gave a wrong science fact. */
+const REJECTED_MODELS = new Set(['thinkingmachines/inkling-2-small:free', 'recursive/flint-v1.0:free']);
 /** Free models that are not general chat models, or are too small to answer well. */
 const UNSUITABLE_MODEL = /code|coder|lyria|audio|omni|guard|embed|(^|[-/])[0-2](\.\d+)?b(\b|:)/i;
 
@@ -349,7 +355,7 @@ const isFree = (model: OpenRouterModel) => Boolean(model.id?.endsWith(':free')) 
 export function pickQuietFreeModels(models: OpenRouterModel[]): string[] {
   return models
     .filter((model) => typeof model.id === 'string' && isFree(model))
-    .filter((model) => !BUSY_FREE_MODEL.test(model.id!) && !UNSUITABLE_MODEL.test(model.id!))
+    .filter((model) => !BUSY_FREE_MODEL.test(model.id!) && !UNSUITABLE_MODEL.test(model.id!) && !REJECTED_MODELS.has(model.id!))
     .filter((model) => (model.architecture?.output_modalities ?? ['text']).every((kind) => kind === 'text'))
     .filter((model) => (model.architecture?.input_modalities ?? ['text']).includes('text'))
     .filter((model) => (model.context_length ?? 0) >= 32_000)
@@ -357,6 +363,10 @@ export function pickQuietFreeModels(models: OpenRouterModel[]): string[] {
 }
 
 let freeModelCache: { at: number; ids: string[]; all: Set<string> } | null = null;
+
+/** Models that refused this app (for example "only available on agentic harnesses"), skipped for an hour. */
+const refusedModels = new Map<string, number>();
+const isRefused = (model: string) => (refusedModels.get(model) ?? 0) > Date.now() - 60 * 60 * 1000;
 
 /** OpenRouter's current list (public, no key needed), cached for an hour. */
 async function openRouterModels(fetcher: typeof fetch): Promise<{ ids: string[]; all: Set<string> }> {
@@ -450,6 +460,7 @@ async function candidateModels(provider: Provider, fetcher: typeof fetch): Promi
       // The list is only a help: carry on with the configured models.
     }
   }
+  models = models.filter((model) => !isRefused(model));
   const remembered = workingModel.get(provider);
   return remembered ? [remembered, ...models.filter((model) => model !== remembered)] : models;
 }
@@ -482,9 +493,13 @@ export async function askWithFallback(chat: ChatRequest, provider: Provider, api
     } catch (error) {
       lastError = error;
       if (workingModel.get(provider) === model) workingModel.delete(provider);
-      const moveOn = isTimeout(error) || (error instanceof AiError && !isAccountProblem(error) && [400, 404, 408, 429, 500, 502, 503, 504].includes(error.status) && !(provider === 'gemini' && error.status === 400));
+      // On OpenRouter, a 403 is about one model (some refuse ordinary apps), so another model may work.
+      if (provider === 'openrouter' && error instanceof AiError && error.status === 403 && !isAccountProblem(error)) refusedModels.set(model, Date.now());
+      const retryable = provider === 'openrouter' ? [400, 403, 404, 408, 429, 500, 502, 503, 504] : [404, 429, 500, 502, 503, 504];
+      const moveOn = isTimeout(error) || (error instanceof AiError && !isAccountProblem(error) && retryable.includes(error.status));
       if (!moveOn) throw error;
-      console.warn(`${PROVIDER_NAMES[provider]} model "${model}" could not answer (${isTimeout(error) ? 'too slow' : (error as AiError).status}); trying the next one.`);
+      const why = isTimeout(error) ? 'too slow' : `${(error as AiError).status}${(error as AiError).detail ? `: ${(error as AiError).detail.slice(0, 120)}` : ''}`;
+      console.warn(`${PROVIDER_NAMES[provider]} model "${model}" could not answer (${why}); trying the next one.`);
     }
   }
   throw lastError;

@@ -343,6 +343,7 @@ describe('AI backend (api/chat)', () => {
       { id: 'recursive/flint-v1.0:free', context_length: 262_144, pricing: { prompt: '0', completion: '0' }, architecture: { input_modalities: ['text'], output_modalities: ['text'] } },
       { id: 'quiet-lab/helper-9:free', context_length: 128_000, pricing: { prompt: '0', completion: '0' }, architecture: { input_modalities: ['text'], output_modalities: ['text'] } },
       { id: 'quiet-lab/helper-10:free', context_length: 128_000, pricing: { prompt: '0', completion: '0' }, architecture: { input_modalities: ['text'], output_modalities: ['text'] } },
+      { id: 'quiet-lab/helper-11:free', context_length: 128_000, pricing: { prompt: '0', completion: '0' }, architecture: { input_modalities: ['text'], output_modalities: ['text'] } },
       { id: 'google/gemma-4-31b-it:free', context_length: 262_144, pricing: { prompt: '0', completion: '0' }, architecture: { input_modalities: ['text'], output_modalities: ['text'] } },
       { id: 'openrouter/free', context_length: 200_000, pricing: { prompt: '0', completion: '0' }, architecture: { input_modalities: ['text'], output_modalities: ['text'] } },
       { id: 'liquid/lfm-3-1.7b:free', context_length: 262_144, pricing: { prompt: '0', completion: '0' }, architecture: { input_modalities: ['text'], output_modalities: ['text'] } },
@@ -352,7 +353,7 @@ describe('AI backend (api/chat)', () => {
     ] };
 
     it('picks only quiet, free, text-chat models', () => {
-      expect(pickQuietFreeModels(LIST.data)).toEqual(['inclusionai/ling-3.2-flash:free', 'recursive/flint-v1.0:free', 'quiet-lab/helper-9:free', 'quiet-lab/helper-10:free']);
+      expect(pickQuietFreeModels(LIST.data)).toEqual(['inclusionai/ling-3.2-flash:free', 'quiet-lab/helper-9:free', 'quiet-lab/helper-10:free', 'quiet-lab/helper-11:free']);
     });
 
     it('sends the rules and conversation in the OpenAI-style format, with no tools', async () => {
@@ -415,6 +416,24 @@ describe('AI backend (api/chat)', () => {
         await expect(askWithFallback(chat, 'openrouter', 'k', fetcher), reason).rejects.toMatchObject({ status, reason });
         expect(calls, reason).toBe(1);
       }
+    });
+
+    it('skips a model that refuses ordinary apps, and remembers it', async () => {
+      vi.stubEnv('OPENROUTER_MODEL', '');
+      const asked: string[] = [];
+      const fetcher = (async (url: string, init?: RequestInit) => {
+        if (String(url).endsWith('/models')) return Response.json(LIST);
+        const model = JSON.parse(init!.body as string).model as string;
+        asked.push(model);
+        if (model === 'inclusionai/ling-3.2-flash:free') return Response.json({ error: { code: 403, message: 'This model is only available on agentic harnesses.' } }, { status: 403 });
+        return Response.json(okReply('Earth is bigger than Mars.'));
+      }) as unknown as typeof fetch;
+      vi.stubEnv('OPENROUTER_MODEL', 'inclusionai/ling-3.2-flash:free');
+      expect(await askWithFallback(chat, 'openrouter', 'k', fetcher)).toBe('Earth is bigger than Mars.');
+      expect(asked.slice(0, 2)).toEqual(['inclusionai/ling-3.2-flash:free', 'quiet-lab/helper-9:free']);
+      asked.length = 0;
+      await askWithFallback(chat, 'openrouter', 'k', fetcher);
+      expect(asked).not.toContain('inclusionai/ling-3.2-flash:free');
     });
 
     it('treats an error sent with status 200 as an error', async () => {
