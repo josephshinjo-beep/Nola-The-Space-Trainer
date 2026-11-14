@@ -1,0 +1,143 @@
+{
+  "recordedAt": "2026-11-14",
+  "source": "NASA Open Science Data Repository (OSDR), study search API: https://osdr.nasa.gov/osdr/data/search",
+  "findings": [
+    {
+      "id": "mice-muscle-bone",
+      "topic": "muscle-bone",
+      "finding": "Mice that lived on the space station for 33 days lost a lot of muscle and bone.",
+      "subjects": "Mice on the International Space Station (SpaceX-19 mission, 2019–2020)",
+      "note": "Astronauts Jessica Meir and Christina Koch, who were on the station at the time, are among the study’s authors.",
+      "quotes": [
+        "Wild type mice lost significant muscle and bone mass during the 33 d spent in microgravity."
+      ],
+      "citation": {
+        "accession": "OSD-342",
+        "studyTitle": "Targeting myostatin/activin A protects against skeletal muscle and bone loss during spaceflight [plasma proteomics]",
+        "publicationTitle": "Targeting myostatin/activin A protects against skeletal muscle and bone loss during spaceflight",
+        "authors": "Se-Jin Lee et al.",
+        "url": "https://osdr.nasa.gov/bio/repo/data/studies/OSD-342"
+      }
+    },
+    {
+      "id": "mice-bone-microbes",
+      "topic": "muscle-bone",
+      "finding": "Mice in space lost bone, and their blood showed signs that their bones were not being kept in balance. The tiny microbes living in their gut changed too.",
+      "subjects": "Mice on the International Space Station (Rodent Research 5, SpaceX-11 mission, 2017)",
+      "note": null,
+      "quotes": [
+        "Along with BMD loss, ELISA analysis reveals increases of osteocalcin and reductions in tartrate-resistant acid phosphatase 5b signifying additional loss of bone homeostasis in flight."
+      ],
+      "citation": {
+        "accession": "OSD-417",
+        "studyTitle": "Specific Host Metabolite and Gut Microbiome Alterations Are Associated with Bone-loss During Spaceflight",
+        "publicationTitle": "Specific host metabolite and gut microbiome alterations are associated with bone loss during spaceflight",
+        "authors": "Joseph K. Bedree et al.",
+        "url": "https://osdr.nasa.gov/bio/repo/data/studies/OSD-417"
+      }
+    },
+    {
+      "id": "bedrest-exercise-men",
+      "topic": "exercise",
+      "finding": "Exercising during the 70 days in bed stopped the volunteers losing fitness, muscle, strength and stamina.",
+      "subjects": "22 healthy young men in NASA’s 70-day bed-rest study on Earth (lying in bed copies some effects of weightlessness)",
+      "note": null,
+      "quotes": [
+        "Exercise training during the National Aeronautics and Space Administration 70-d bed rest study effectively counteracted the decline in aerobic capacity, muscle mass, strength, and endurance."
+      ],
+      "citation": {
+        "accession": "OSD-942",
+        "studyTitle": "Exercise Training Attenuates the Muscle Mitochondria Genomic Response to Bed Rest (microarray data)",
+        "publicationTitle": "Exercise Training Attenuates the Muscle Mitochondria Genomic Response to Bed Rest.",
+        "authors": "Cotter JA et al.",
+        "url": "https://osdr.nasa.gov/bio/repo/data/studies/OSD-942"
+      }
+    },
+    {
+      "id": "bedrest-exercise-women",
+      "topic": "exercise",
+      "finding": "Exercise almost cancelled out the changes in how their muscle genes behaved: it cut the number of changed genes by 89% and 96% in the two muscles studied. Extra protein in their food helped much less.",
+      "subjects": "24 healthy women in a 60-day bed-rest study on Earth",
+      "note": null,
+      "quotes": [
+        "Exercise countermeasure demonstrated a drastic compensatory effect, decreasing the number of differentially-expressed genes by 89 and 96% in SOL and VL."
+      ],
+      "citation": {
+        "accession": "OSD-51",
+        "studyTitle": "Woman skeletal muscle transcriptome with bed rest and countermeasures.",
+        "publicationTitle": "Large-scale mRNA analysis of female skeletal muscles during 60 days of bed rest with and without exercise or dietary protein supplementation as countermeasures.",
+        "authors": "Chopard A et al.",
+        "url": "https://osdr.nasa.gov/bio/repo/data/studies/OSD-51"
+      }
+    },
+    {
+      "id": "leg-unloading-recovery",
+      "topic": "exercise",
+      "finding": "Their thigh muscles got smaller and weaker. Then 21 days of strength exercise brought most of it back.",
+      "subjects": "11 healthy young men who kept one leg off the ground for 10 days, on Earth",
+      "note": null,
+      "quotes": [
+        "QF CSA and MVC decreased with ULLS.",
+        "The AR period restored most of these neuromuscular alterations."
+      ],
+      "citation": {
+        "accession": "OSD-540",
+        "studyTitle": "Ten-day human unilateral lower limb suspension and active recovery in young healthy men",
+        "publicationTitle": "Effects of short‐term unloading and active recovery on human motor unit properties, neuromuscular junction transmission and transcriptomic profile",
+        "authors": "Sarto Fabio et al.",
+        "url": "https://osdr.nasa.gov/bio/repo/data/studies/OSD-540"
+      }
+    },
+    {
+      "id": "astronaut-body-clock",
+      "topic": "sleep",
+      "finding": "Spaceflight changed the body’s daily clock (the circadian rhythm, which tells us when to feel sleepy) and stressed the tiny power stations inside cells.",
+      "subjects": "Health data from 59 astronauts, NASA’s Twins Study, and hundreds of samples flown in space",
+      "note": "This study looked at the body clock, not at sleep itself. Real astronauts plan their sleep carefully because the body clock gets confused in space.",
+      "quotes": [
+        "Additional pathways altered in spaceflight included cell cycle, circadian rhythm, and olfactory activity pathways, all of which are known to have interactions with mitochondrial activity."
+      ],
+      "citation": {
+        "accession": "OSD-343",
+        "studyTitle": "Comprehensive multi-omics analysis reveals mitochondrial stress as a central biological hub for spaceflight impact",
+        "publicationTitle": "Comprehensive Multi-omics Analysis Reveals Mitochondrial Stress as a Central Biological Hub for Spaceflight Impact",
+        "authors": "Willian A. da Silveira et al.",
+        "url": "https://osdr.nasa.gov/bio/repo/data/studies/OSD-343"
+      }
+    },
+    {
+      "id": "radiation-learning",
+      "topic": "radiation",
+      "finding": "After the radiation, male mice found it harder to learn their way around a maze. Female mice did not.",
+      "subjects": "Mice on Earth exposed to particle beams that copy deep-space radiation",
+      "note": null,
+      "quotes": [
+        "males displayed impaired spatial learning, whereas females did not."
+      ],
+      "citation": {
+        "accession": "OSD-479",
+        "studyTitle": "The impact of deep space radiation on cognitive performance: From biological sex to biomarkers to countermeasures (Elevated Plus Maze, Novel Object Recognition, Open Field, Radial Arm Water Maze, and Three Chamber Social Isolation/Interaction)",
+        "publicationTitle": "The impact of deep space radiation on cognitive performance: From biological sex to biomarkers to countermeasures",
+        "authors": "Krukowski K et al.",
+        "url": "https://osdr.nasa.gov/bio/repo/data/studies/OSD-479"
+      }
+    },
+    {
+      "id": "radiation-muscle",
+      "topic": "radiation",
+      "finding": "Scientists checked the mice’s muscle proteins 9 months after they recovered. The study found a long-term effect on the proteins that help muscles use energy.",
+      "subjects": "Female mice on Earth: weightlessness copied by lifting their back legs, then a low dose of copied space radiation",
+      "note": null,
+      "quotes": [
+        "We investigated protein abundance changes 9-months after recovery from combined unloading and radiation exposure."
+      ],
+      "citation": {
+        "accession": "OSD-984",
+        "studyTitle": "Low-dose Simulated Galactic Cosmic Radiation Exposure After Hindlimb Unloading Has Long-term Impact on Skeletal Muscle Metabolic Proteins",
+        "publicationTitle": "Low-dose simulated galactic cosmic radiation exposure after hindlimb unloading has long-term impact on skeletal muscle metabolic proteins in female mice",
+        "authors": "Martone Matthew et al.",
+        "url": "https://osdr.nasa.gov/bio/repo/data/studies/OSD-984"
+      }
+    }
+  ]
+}

@@ -4,7 +4,10 @@ import { Link } from 'react-router';
 import { Button, buttonClasses } from '../components/Button';
 import { ConfirmDialog, Modal } from '../components/ConfirmDialog';
 import { pauseSpaceBackdrop } from '../components/space/SpaceBackdrop';
+import { pickFinding, useAstronautScience } from '../data/astronautScience';
 import { nextStormEvent, useSpaceEvents } from '../data/spaceEvents';
+import { AstronautScienceCard } from '../features/science/AstronautScienceCard';
+import { stormHarm } from '../sol/engine';
 import { useSpaceWeather } from '../data/useSpaceWeather';
 import { useAcademyProgress } from '../features/academy/AcademyProgressContext';
 import { CURRICULUM } from '../features/academy/curriculum';
@@ -96,7 +99,8 @@ function StationGame() {
   const solMission = useSolMission(user?.uid);
   const solSave = solMission.save;
   const spaceEvents = useSpaceEvents();
-  const [stormMessage, setStormMessage] = useState<string | null>(null);
+  const [stormMessage, setStormMessage] = useState<{ text: string; harmed: boolean; turn: number } | null>(null);
+  const science = useAstronautScience();
   const [commsMessage, setCommsMessage] = useState<string | null>(null);
 
   // The game fills the screen, so the star background behind it can rest.
@@ -160,7 +164,7 @@ function StationGame() {
   useEffect(() => {
     if (stormMinutesLeft === null || stormMinutesLeft > 0) return;
     const hit = stormHits();
-    if (hit) setStormMessage(stormResultText(hit));
+    if (hit) setStormMessage({ text: stormResultText(hit), harmed: stormHarm(hit.choice, hit.severity) > 0, turn: hit.announcedSol });
   }, [stormMinutesLeft, stormHits]);
 
   // Opening the Command Console still counts for the "Find your feet" mission.
@@ -222,6 +226,9 @@ function StationGame() {
                 <p aria-live="polite" className="text-sm font-semibold">
                   {solHint(solSave)}
                 </p>
+                <p className="mt-1 text-xs text-mist">
+                  Muscles &amp; bones {Math.round(solSave.state.body.muscleBone)}% · Rest {Math.round(solSave.state.body.rest)}%
+                </p>
               </section>
             )}
             <EarthLinkPanel state={state} />
@@ -241,12 +248,19 @@ function StationGame() {
               />
             ) : (
               stormMessage && (
-                <p role="status" className="pointer-events-auto flex max-w-sm items-start gap-2 rounded-2xl border-2 border-nola bg-hull/95 p-3 text-sm font-semibold">
-                  <span className="flex-1">{stormMessage}</span>
-                  <button type="button" onClick={() => setStormMessage(null)} className="font-bold text-nola-soft underline">
-                    OK
-                  </button>
-                </p>
+                <div role="status" className="pointer-events-auto max-h-[60vh] w-full max-w-[26rem] space-y-2 overflow-y-auto rounded-2xl border-2 border-nola bg-hull/95 p-3 text-sm font-semibold">
+                  <p className="flex items-start gap-2">
+                    <span className="flex-1">{stormMessage.text}</span>
+                    <button type="button" onClick={() => setStormMessage(null)} className="font-bold text-nola-soft underline">
+                      OK
+                    </button>
+                  </p>
+                  {stormMessage.harmed &&
+                    (() => {
+                      const card = pickFinding(science, 'radiation', stormMessage.turn);
+                      return card ? <AstronautScienceCard card={card} compact /> : null;
+                    })()}
+                </div>
               )
             )}
           </div>

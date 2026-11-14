@@ -19,7 +19,11 @@ export interface Decision {
   nightEffect?: NightEffect;
   /** When set, the gains depend on a task completed in the 3D action phase. */
   gainsAfterAction?: { taskId: string; taskLabel: string };
+  /** What it does for the crew's body (muscles and bones, rest). Paid with the gains. */
+  bodyEffect?: Partial<Record<BodyPart, Param>>;
 }
+
+export type BodyPart = 'muscleBone' | 'rest';
 
 export type Phase = 'decision' | 'action' | 'night';
 export type MissionStatus = 'active' | 'complete' | 'failed';
@@ -58,6 +62,8 @@ export interface SolState {
   /** Night effects set by today's decisions. */
   tonight: { heatingLow: boolean; greenhouseOff: boolean; deferred: { decisionId: string; label: string; costs: Amounts }[] };
   ledger: LedgerEntry[];
+  /** The crew's body: muscle and bone condition, and rest, each 0-100. */
+  body: Record<BodyPart, number>;
   /** The radiation storm on its way, if any. */
   storm: RadiationStorm | null;
   /** Ids of real events already used for storms, so none repeats. */

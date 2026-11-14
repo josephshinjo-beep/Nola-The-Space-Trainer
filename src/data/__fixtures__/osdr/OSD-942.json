@@ -1,0 +1,19 @@
+{
+ "hits": {
+  "total": 2,
+  "hits": [
+   {
+    "_source": {
+     "Accession": "OSD-942",
+     "Study Title": "Exercise Training Attenuates the Muscle Mitochondria Genomic Response to Bed Rest (microarray data)",
+     "Study Publication Title": "Exercise Training Attenuates the Muscle Mitochondria Genomic Response to Bed Rest.",
+     "Study Publication Author List": "Cotter JA  Plaza-Florido A  Adams GR  Haddad F  Scott JM  Everett M  Ploutz-Snyder L  Radom-Aizik S.",
+     "organism": "Homo sapiens",
+     "Flight Program": "",
+     "Study Description": "Exercise training during the National Aeronautics and Space Administration 70-d bed rest study effectively counteracted the decline in aerobic capacity, muscle mass, strength, and endurance. We aimed to characterize the genomic response of the participants' vastus lateralis on day 64 of bed rest with and without exercise countermeasures. Twenty-two healthy young males were randomized into three groups: 1) bed rest only (n equals 7), 2) bed rest + aerobic (6 d/wk) and resistance training (3 d/wk) on standard equipment (n equals 7), and 3) bed rest + aerobic and resistance training using a flywheel device (n equals 8). The vastus lateralis gene and microRNA microarrays were analyzed using GeneSpring GX 14.9.1 (Agilent Technologies, Palo Alto, CA).",
+     "Study Public Release Date": 1719446400.0
+    }
+   }
+  ]
+ }
+}

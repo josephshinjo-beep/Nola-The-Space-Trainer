@@ -1,0 +1,19 @@
+{
+ "hits": {
+  "total": 1,
+  "hits": [
+   {
+    "_source": {
+     "Accession": "OSD-479",
+     "Study Title": "The impact of deep space radiation on cognitive performance: From biological sex to biomarkers to countermeasures (Elevated Plus Maze, Novel Object Recognition, Open Field, Radial Arm Water Maze, and Three Chamber Social Isolation/Interaction)",
+     "Study Publication Title": "The impact of deep space radiation on cognitive performance: From biological sex to biomarkers to countermeasures",
+     "Study Publication Author List": "Krukowski K  Grue K  Becker M  Elizarraras E  Frias ES  Halvorsen A  Koenig-Zanoff M  Frattini V  Nimmagadda H  Feng X  Jones T  Nelson G  Ferguson AR  Rosi S.",
+     "organism": "Mus musculus",
+     "Flight Program": "",
+     "Study Description": "In the coming decade, astronauts will travel back to the moon in preparation for future Mars missions. Exposure to galactic cosmic radiation (GCR) is a major obstacle for deep space travel. Using multivariate principal components analysis, we found sex dimorphic responses in mice exposed to accelerated charged particles to simulate GCR (GCRsim); males displayed impaired spatial learning, whereas females did not. Mechanistically, these GCRsim induced learning impairments corresponded with chronic microglia activation and synaptic alterations in the hippocampus. Temporary microglia depletion shortly after GCRsim exposure mitigated GCRsim induced deficits measured months after the radiation exposure. Furthermore, blood monocyte levels measured early after GCRsim exposure were predictive of the late learning deficits and microglia activation measured in the male mice. Our findings (i) advance our understanding of charged particle induced cognitive challenges, (ii) provide evidence for early peripheral biomarkers for identifying late cognitive deficits, and (iii) offer potential therapeutic strategies for mitigating GCR induced cognitive loss. This study derives results from the behavior assays Elevated Plus Maze, Novel Object Recognition, Open Field, Radial Arm Water Maze, and Three Chamber Social Isolation/Interaction. These data are related to the Flow Cytometry data in OSD-776 (blood), OSD-777 (Microglia), and OSD-778 (Synapse).",
+     "Study Public Release Date": 1729123200.0
+    }
+   }
+  ]
+ }
+}

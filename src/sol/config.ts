@@ -114,6 +114,23 @@ export const SOL_CONFIG = {
     brownoutLoss: simple(10, '%', 'Crew health lost when even basic life support runs short of power.'),
   },
 
+  /**
+   * The crew's body. Weightlessness weakens muscles and bones, and a busy
+   * crew builds up tiredness. Both are tracked as a 0-100 condition. The
+   * effects are real (see the Astronaut Science cards, which cite NASA OSDR
+   * studies); the rates are game values.
+   */
+  body: {
+    startMuscleBone: simple(100, '%', 'Muscle and bone condition at the start.'),
+    startRest: simple(100, '%', 'How well rested the crew is at the start.'),
+    muscleBoneLossPerSol: simple(2, '%', 'Muscle and bone condition lost each sol without exercise. Real fact for context: mice on the ISS lost significant muscle and bone mass in 33 days (NASA OSDR, OSD-342). The rate is a game value.'),
+    restLossPerSol: simple(8, '%', 'Rest lost each sol as tiredness builds up. Game value.'),
+    lowMuscleBone: simple(70, '%', 'Below this, weak muscles and bones start to cost crew health.'),
+    lowRest: simple(40, '%', 'Below this, tiredness starts to cost crew health.'),
+    deconditioningLoss: simple(3, '%', 'Crew health lost each night while muscles and bones are weak.'),
+    fatigueLoss: simple(3, '%', 'Crew health lost each night while the crew is too tired.'),
+  },
+
   action: {
     maxCrewHealthLoss: simple(10, '%', 'The most crew health the action phase can report losing in one sol.'),
     failedTaskGainShare: simple(0, 'share', 'Share of a task\'s reward still earned when the action-phase task fails.'),
@@ -154,6 +171,7 @@ export const DECISION_AMOUNTS = {
   },
   skipMaintenance: {
     crewHealthGain: simple(4, '%', 'Crew health regained by resting instead of doing the maintenance shift.'),
+    restGain: simple(25, '%', 'Rest regained by taking the maintenance shift off.'),
     shieldingCost: simple(6, '%', 'Shielding integrity lost because the maintenance was missed.'),
   },
   maintenanceEva: {
@@ -183,6 +201,13 @@ export const DECISION_AMOUNTS = {
   restDay: {
     crewHealthGain: simple(6, '%', 'Crew health regained by a full rest day.'),
     foodCost: simple(1.5, 'kg', 'An extra recovery meal for the crew.'),
+    researchCost: simple(2, 'points', 'Science time given up for a day off.'),
+    restGain: simple(50, '%', 'Rest regained by a full day off.'),
+  },
+  exercise: {
+    researchCost: simple(2, 'points', 'Science time spent exercising instead. Real fact for context: astronauts on the ISS exercise about two hours every day (NASA).'),
+    powerCost: simple(3, 'kWh', 'Power for the treadmill and exercise bike. Game value.'),
+    muscleBoneGain: simple(10, '%', 'Muscle and bone condition regained by an exercise session. Real fact for context: in NASA bed-rest studies, exercise largely prevented the loss of muscle and strength (NASA OSDR, OSD-942 and OSD-51). Game value.'),
   },
   boostGreenhouseLights: {
     foodGain: simple(1.5, 'kg', 'Extra food grown with longer light hours.'),

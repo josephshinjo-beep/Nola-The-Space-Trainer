@@ -6,8 +6,10 @@ import { ReadAloudButton } from '../../features/accessibility/ReadAloudButton';
 import { NolaMascot } from '../../features/companion/NolaMascot';
 import type { SystemId } from '../../features/unlocks/unlockManager';
 import { SOL_CONFIG, type Resource } from '../../sol/config';
-import type { Amounts } from '../../sol/types';
-import { pickCards, RESOURCE_LABELS, urgentPlace, type CardLine, type KidCard } from './cards';
+import type { Amounts, BodyPart } from '../../sol/types';
+import { LINE_LABELS, pickCards, urgentPlace, type CardLine, type KidCard } from './cards';
+import { pickFinding, useAstronautScience } from '../../data/astronautScience';
+import { AstronautScienceCard } from '../../features/science/AstronautScienceCard';
 import { urgentJob, type SolSave, type SolSummary } from './solFlow';
 
 interface SolBriefingProps {
@@ -20,7 +22,7 @@ interface SolBriefingProps {
 }
 
 function Line({ line, kind }: { line: CardLine; kind: 'gain' | 'lose' }) {
-  const { name, icon: Icon } = RESOURCE_LABELS[line.resource];
+  const { name, icon: Icon } = LINE_LABELS[line.resource];
   return (
     <li className="flex items-start gap-2">
       <span aria-hidden="true" className={`mt-0.5 flex h-7 w-7 shrink-0 items-center justify-center rounded-full ${kind === 'gain' ? 'bg-go/20 text-go' : 'bg-alert/20 text-alert'}`}>
@@ -83,9 +85,9 @@ function Card({ card, onChoose }: { card: KidCard; onChoose: () => void }) {
 }
 
 /** "Air, Shield" style list of the resources in an amount. */
-const names = (amounts: Amounts) =>
-  (Object.keys(amounts) as Resource[]).map((resource) => {
-    const { name, icon: Icon } = RESOURCE_LABELS[resource];
+const names = (amounts: Amounts | Partial<Record<BodyPart, number>>) =>
+  (Object.keys(amounts) as (Resource | BodyPart)[]).map((resource) => {
+    const { name, icon: Icon } = LINE_LABELS[resource];
     return (
       <li key={resource} className="flex items-center gap-2">
         <Icon aria-hidden="true" size={18} className="text-glow" /> {name}
@@ -101,6 +103,7 @@ const names = (amounts: Amounts) =>
 export function SolBriefing({ save, unlocked, onPlan, onSkip, onFinish, onClose }: SolBriefingProps) {
   const [chosen, setChosen] = useState<KidCard | null>(null);
   const [summary, setSummary] = useState<SolSummary | null>(null);
+  const science = useAstronautScience();
   const [confirmEnd, setConfirmEnd] = useState(false);
   const { state } = save;
   const sols = SOL_CONFIG.time.missionLengthSols.value;
@@ -131,7 +134,7 @@ export function SolBriefing({ save, unlocked, onPlan, onSkip, onFinish, onClose 
               <h3 className="flex items-center gap-1 font-display text-lg text-go">
                 <Plus aria-hidden="true" size={18} /> Your plan gave
               </h3>
-              <ul className="mt-1">{Object.keys(summary.cardGave).length ? names(summary.cardGave) : <li>Nothing this time.</li>}</ul>
+              <ul className="mt-1">{Object.keys(summary.cardGave).length + Object.keys(summary.bodyGave).length ? names({ ...summary.cardGave, ...summary.bodyGave }) : <li>Nothing this time.</li>}</ul>
             </section>
             <section className="rounded-2xl border-2 border-alert/50 p-3">
               <h3 className="flex items-center gap-1 font-display text-lg text-alert">
@@ -141,6 +144,10 @@ export function SolBriefing({ save, unlocked, onPlan, onSkip, onFinish, onClose 
             </section>
           </div>
         )}
+        {summary.science && (() => {
+          const card = pickFinding(science, summary.science, summary.sol);
+          return card ? <AstronautScienceCard card={card} /> : null;
+        })()}
         {summary.missionOver === 'complete' && <p className="rounded-2xl bg-go/15 p-3 text-lg font-semibold text-go">Mission complete! You kept the crew going for all {sols} sols.</p>}
         {summary.missionOver === 'failed' && <p className="rounded-2xl bg-alert/15 p-3 text-lg font-semibold text-alert">The crew is too unwell to carry on. The mission is over.</p>}
         <Button onClick={onClose}>{summary.missionOver ? 'Close' : `Start sol ${summary.sol + 1}`}</Button>

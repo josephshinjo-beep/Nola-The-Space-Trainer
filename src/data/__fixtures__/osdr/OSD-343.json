@@ -1,0 +1,19 @@
+{
+ "hits": {
+  "total": 1,
+  "hits": [
+   {
+    "_source": {
+     "Accession": "OSD-343",
+     "Study Title": "Comprehensive multi-omics analysis reveals mitochondrial stress as a central biological hub for spaceflight impact",
+     "Study Publication Title": "Comprehensive Multi-omics Analysis Reveals Mitochondrial Stress as a Central Biological Hub for Spaceflight Impact",
+     "Study Publication Author List": "Willian A. da Silveira  Hossein Fazelinia  Sara Brin Rosenthal  Evagelia C. Laiakis  Man S. Kim  Cem Meydan  Yared Kidane  Komal S. Rathi  Scott M. Smith  Benjamin Stear  Yue Ying  Yuanchao Zhang  Jonathan Foox  Susana Zanello  Brian Crucian  Dong Wang  Adrienne Nugent  Helio A. Costa  Sara R. Zwart  Sonja Schrepfer  R.A. Leo Elworth  Nicolae Sapoval  Todd Treangen  Matthew MacKay  Nandan S. Gokhale  Stacy M. Horner  Larry N. Singh  Douglas C. Wallace  Jeffrey S. Willey  Jonathan C. Schisler  Robert Meller  J. Tyson McDonald   Kathleen M. Fisch  Gary Hardiman  Deanne Taylor  Christopher E. Mason  Sylvain V. Costes and Afshin Beheshti",
+     "organism": "Mus musculus",
+     "Flight Program": "International Space Station (ISS)",
+     "Study Description": "Given the limited knowledge of the biological impact of spaceflight, a multi-omics, systems biology approach was used to investigate NASA’s GeneLab data and astronaut biomedical profiles. These data consist of hundreds of samples flown in space, human metrics from 59 astronauts, and confirmatory data from NASA’s Twin Study, analyzed together for consistent transcriptomic, proteomic, metabolomic, and epigenetic response to spaceflight. Pathway analysis showed significant enrichment of mitochondrial activity and innate immunity. Muscle and liver tissues showed that chronic inflammation, may be a response to mitochondrial dysfunction. Additional pathways altered in spaceflight included cell cycle, circadian rhythm, and olfactory activity pathways, all of which are known to have interactions with mitochondrial activity. Evidence of altered mitochondrial function was also found in the urine and blood metabolic data compiled from the astronaut cohort and NASA Twin Study data, all of which indicate mitochondrial stress as a consistent phenotype of spaceflight.",
+     "Study Public Release Date": 1606867200.0
+    }
+   }
+  ]
+ }
+}

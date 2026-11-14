@@ -1,0 +1,19 @@
+{
+ "hits": {
+  "total": 1,
+  "hits": [
+   {
+    "_source": {
+     "Accession": "OSD-984",
+     "Study Title": "Low-dose Simulated Galactic Cosmic Radiation Exposure After Hindlimb Unloading Has Long-term Impact on Skeletal Muscle Metabolic Proteins",
+     "Study Publication Title": "Low-dose simulated galactic cosmic radiation exposure after hindlimb unloading has long-term impact on skeletal muscle metabolic proteins in female mice",
+     "Study Publication Author List": "Martone Matthew  Irving Brian A.  Spielmann Guillaume  Johannsen Neil M.  Robinson Matthew M.  Chancellor Jeffery C.  Allaway Heather C. M.",
+     "organism": "Mus musculus",
+     "Flight Program": "",
+     "Study Description": "Spaceflight stressors, including microgravity-induced unloading and galactic cosmic radiation (GCR), acutely disrupt mitochondrial function and contribute to skeletal muscle atrophy. The long-term recovery of muscle mitochondria following combined unloading and radiation exposure remains poorly understood. We investigated protein abundance changes 9-months after recovery from combined unloading and radiation exposure.",
+     "Study Public Release Date": 1789948800.0
+    }
+   }
+  ]
+ }
+}

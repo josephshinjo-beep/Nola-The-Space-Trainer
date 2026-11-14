@@ -1,6 +1,8 @@
 import { RESOURCES, type Resource } from '../../sol/config';
 import { choose, CLEAR_NIGHT, createSolState, decisionReport, endDecisionPhase, endSol, resolveActionPhase, respondToStorm, startRadiationStorm, stormArrives, type StormStart } from '../../sol/engine';
-import type { Amounts, NightConditions, RadiationStorm, Result, SolState, StormChoice } from '../../sol/types';
+import type { Amounts, BodyPart, LedgerEntry, NightConditions, RadiationStorm, Result, SolState, StormChoice } from '../../sol/types';
+import type { ScienceTopic } from '../../data/astronautScience';
+import { findDecision } from '../../sol/decisions';
 import { findCard, type KidCard } from './cards';
 
 /**
@@ -97,8 +99,12 @@ export interface SolSummary {
   change: Amounts;
   /** What the chosen card gave and cost, including its night cost. */
   cardGave: Amounts;
+  /** What the card did for the crew's body (only when its job was done). */
+  bodyGave: Partial<Record<BodyPart, number>>;
   cardCost: Amounts;
   events: string[];
+  /** The Astronaut Science topic that explains today's change in crew health, if it changed. */
+  science: ScienceTopic | null;
   missionOver: 'complete' | 'failed' | null;
 }
 
@@ -109,6 +115,8 @@ const KID_EVENTS: Record<string, string> = {
   'system:radiation': 'Space radiation hurt the crew tonight.',
   'system:recovery': 'The crew had a good night and feels better.',
   'system:action-injuries': 'Someone got hurt during the day.',
+  'system:deconditioning': 'Weak muscles and bones made the crew feel worse. A workout helps!',
+  'system:fatigue': 'The crew was too tired and felt worse. A rest day helps!',
 };
 
 const KID_STORM_EVENTS: Record<string, string> = {
@@ -116,6 +124,22 @@ const KID_STORM_EVENTS: Record<string, string> = {
   'Storm passes while the crew shelters': 'A radiation storm passed while the crew stayed safe in the shelter.',
   'Storm hits an unprotected crew': 'A radiation storm hit and the crew was not protected.',
 };
+
+/**
+ * Which real research explains what happened to the crew's health today.
+ * Harm comes first (radiation, weak muscles, tiredness), then help
+ * (a finished workout or rest). Null if nothing about health happened.
+ */
+export function scienceTopicFor(entries: readonly LedgerEntry[]): ScienceTopic | null {
+  const has = (test: (entry: LedgerEntry) => boolean) => entries.some(test);
+  const completed = (id: string) => has((entry) => entry.source === id && entry.phase === 'action' && entry.label.endsWith(': completed'));
+  if (has((entry) => entry.source === 'system:radiation' || (entry.source.startsWith('storm:') && (entry.cost.crewHealth ?? 0) > 0))) return 'radiation';
+  if (has((entry) => entry.source === 'system:deconditioning')) return 'muscle-bone';
+  if (has((entry) => entry.source === 'system:fatigue')) return 'sleep';
+  if (completed('exercise')) return 'exercise';
+  if (completed('rest-day') || completed('skip-maintenance')) return 'sleep';
+  return null;
+}
 
 /** Evening: end the sol. The urgent job counts as failed if it was not done. */
 export function finishSol(save: SolSave, conditions: NightConditions = CLEAR_NIGHT): Result<SolSave> & { summary?: SolSummary } {
@@ -142,8 +166,10 @@ export function finishSol(save: SolSave, conditions: NightConditions = CLEAR_NIG
     jobDone: job?.done ?? false,
     change,
     cardGave: report.gave,
+    bodyGave: job?.done ? Object.fromEntries(Object.entries(findDecision(job.card.decisionId)?.bodyEffect ?? {}).map(([part, param]) => [part, param!.value])) : {},
     cardCost: report.cost,
     events,
+    science: change.crewHealth !== undefined || scienceTopicFor(solEntries) ? scienceTopicFor(solEntries) : null,
     missionOver: after.status === 'active' ? null : after.status,
   };
   return { ok: true, state: { ...save, state: after, doneTasks: [] }, summary };
@@ -164,6 +190,8 @@ export function reviveSolSave(raw: unknown): SolSave | null {
     state: {
       ...(state as SolState),
       tonight: { ...state.tonight, deferred: state.tonight.deferred ?? [] },
+      // Saves from before the crew's body was tracked start fully fit.
+      body: isBody(state.body) ? state.body : { muscleBone: 100, rest: 100 },
       // Saves from before radiation storms existed have neither field.
       storm: isStorm(state.storm) ? state.storm : null,
       stormEventsUsed: Array.isArray(state.stormEventsUsed) ? state.stormEventsUsed.filter((id): id is string => typeof id === 'string') : [],
@@ -182,4 +210,9 @@ function isStorm(value: unknown): value is RadiationStorm {
     typeof storm.arrivesAtStationMinute === 'number' &&
     (storm.choice === null || storm.choice === 'reinforce' || storm.choice === 'shelter')
   );
+}
+
+function isBody(value: unknown): value is SolState['body'] {
+  const body = value as Partial<SolState['body']> | null;
+  return typeof body?.muscleBone === 'number' && Number.isFinite(body.muscleBone) && typeof body.rest === 'number' && Number.isFinite(body.rest);
 }

@@ -247,6 +247,41 @@ describe('phases', () => {
   });
 });
 
+describe("the crew's body", () => {
+  it('exercise costs science time and power, and strengthens muscles and bones only when the workout is done', () => {
+    const before = start();
+    let s = ok(choose({ ...before, body: { muscleBone: 80, rest: 100 } }, 'exercise'));
+    expect(before.resources.research - s.resources.research).toBe(DECISION_AMOUNTS.exercise.researchCost.value);
+    expect(before.resources.power - s.resources.power).toBe(DECISION_AMOUNTS.exercise.powerCost.value);
+    expect(s.body.muscleBone).toBe(80);
+    s = ok(endDecisionPhase(s));
+    expect(ok(resolveActionPhase(s, { completed: ['workout'], failed: [] })).body.muscleBone).toBe(80 + DECISION_AMOUNTS.exercise.muscleBoneGain.value);
+    expect(ok(resolveActionPhase(s, { completed: [], failed: ['workout'] })).body.muscleBone).toBe(80);
+  });
+
+  it('a rest day costs science time and food, and restores rest', () => {
+    const before = { ...start(), body: { muscleBone: 100, rest: 30 } };
+    const s = doTasks(ok(choose(before, 'rest-day')));
+    expect(before.resources.research - s.resources.research).toBe(DECISION_AMOUNTS.restDay.researchCost.value);
+    expect(s.body.rest).toBe(30 + DECISION_AMOUNTS.restDay.restGain.value);
+  });
+
+  it('each night weakens muscles and bones and adds tiredness; too low costs crew health, in the ledger', () => {
+    const s = ok(endSol(doTasks({ ...start(), body: { muscleBone: C.body.lowMuscleBone.value, rest: C.body.lowRest.value } })));
+    expect(s.body.muscleBone).toBe(C.body.lowMuscleBone.value - C.body.muscleBoneLossPerSol.value);
+    expect(s.body.rest).toBe(C.body.lowRest.value - C.body.restLossPerSol.value);
+    const sol1 = s.ledger.filter((entry) => entry.sol === 1);
+    expect(sol1.find((entry) => entry.source === 'system:deconditioning')?.cost.crewHealth).toBe(C.body.deconditioningLoss.value);
+    expect(sol1.find((entry) => entry.source === 'system:fatigue')?.cost.crewHealth).toBe(C.body.fatigueLoss.value);
+    expect(sol1.some((entry) => entry.source === 'system:recovery')).toBe(false);
+  });
+
+  it('never goes above 100', () => {
+    const s = doTasks(ok(choose(start(), 'exercise')));
+    expect(s.body.muscleBone).toBe(100);
+  });
+});
+
 describe('the night', () => {
   it('a quiet night with no decisions follows the life-support numbers', () => {
     const s = playSol(start());
@@ -361,11 +396,23 @@ describe('pacing (from the survival-crafting checklist)', () => {
       }
     }
     console.info(`[pacing] Doing nothing for ${C.time.missionLengthSols.value} sols, first sol each store fell below the warning line:`, firstLow, `| research: ${s.resources.research}`);
-    // Doing nothing is survivable but fails the science goal: decisions are needed to succeed.
-    expect(s.status).toBe('complete');
+    // Doing nothing fails: with no rest and no exercise, the crew grows tired and weak.
+    expect(s.status).toBe('failed');
     expect(researchGoalMet(s)).toBe(false);
-    // Food is the slow pressure: it runs low before the mission ends without help.
-    expect(firstLow.food).not.toBeNull();
-    expect(firstLow.food!).toBeGreaterThan(10);
+    const sources = new Set(s.ledger.map((entry) => entry.source));
+    expect(sources.has('system:fatigue')).toBe(true);
+    expect(sources.has('system:deconditioning')).toBe(true);
+  });
+
+  it('a crew that exercises and rests regularly gets through the whole mission', () => {
+    let s = start();
+    const plan = ['exercise', 'report-to-earth', 'rest-day', 'report-to-earth', 'exercise', 'skip-maintenance'];
+    while (s.status === 'active') {
+      const wanted = plan[(s.sol - 1) % plan.length]!;
+      s = playSol(s, whyNot(s, wanted) === null ? [wanted] : []);
+    }
+    expect(s.status).toBe('complete');
+    expect(s.body.muscleBone).toBeGreaterThan(C.body.lowMuscleBone.value);
+    expect(s.body.rest).toBeGreaterThan(C.body.lowRest.value);
   });
 });

@@ -1,0 +1,19 @@
+{
+ "hits": {
+  "total": 1,
+  "hits": [
+   {
+    "_source": {
+     "Accession": "OSD-417",
+     "Study Title": "Specific Host Metabolite and Gut Microbiome Alterations Are Associated with Bone-loss During Spaceflight",
+     "Study Publication Title": "Specific host metabolite and gut microbiome alterations are associated with bone loss during spaceflight",
+     "Study Publication Author List": "Joseph K. Bedree  Kristopher Kerns  Tsute Chen  Bruno P. Lima  Guo Liu  Pin Ha  Jiayu Shi  Hsin Chuan Pan  Jong Kil Kim  Luan Tran  Samuel S. Minot  Erik L. Hendrickson  Eleanor I. Lamont  Fabian Schulte  Markus Hardt  Danielle Stephens  Michele Patel  Alexis Kokaras  Louis Stodieck  Yasaman Shirazi-Fard  Benjamin Wu  Jin Hee Kwak  Kang Ting  Chia Soo  Jeffrey S. McLean  Xuesong He  Wenyuan Shi",
+     "organism": "Mus musculus     Microbiota",
+     "Flight Program": "International Space Station (ISS)",
+     "Study Description": "Understanding the axis of the human microbiome and physiological homeostasis is an essential task in managing deep-space travel associated health risks. The NASA led Rodent Research 5 mission enabled an ancillary investigation of the gut microbiome varying exposure to microgravity (flight) relative to ground controls in the context of previously shown bone mineral density (BMD) loss that was observed in these flight groups. We demonstrate elevated abundance of Lactobacillus murinus and Dorea sp. during microgravity exposure relative to ground control through whole genome sequencing and 16S rRNA analyses. Specific functionally assigned gene clusters of Lactobacillus murinus and Dorea sp. capable of producing metabolites, lactic acid, leucine/isoleucine, and glutathione are enriched. These metabolites are elevated in the microgravity-exposed host serum through LC-MS/MS metabolomic analysis. Along with BMD loss, ELISA analysis reveals increases of osteocalcin and reductions in tartrate-resistant acid phosphatase 5b signifying additional loss of bone homeostasis in flight.",
+     "Study Public Release Date": 1681862400.0
+    }
+   }
+  ]
+ }
+}

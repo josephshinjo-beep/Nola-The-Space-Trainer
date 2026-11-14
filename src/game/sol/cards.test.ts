@@ -27,7 +27,7 @@ describe('kid cards', () => {
   it('"You gain" and "You lose" name exactly what the decision really gives and takes', () => {
     for (const card of KID_CARDS) {
       const decision = findDecision(card.decisionId)!;
-      expect(card.gain.map((l) => l.resource).sort(), card.decisionId).toEqual(Object.keys(decision.gains).sort());
+      expect(card.gain.map((l) => l.resource).sort(), card.decisionId).toEqual([...Object.keys(decision.gains), ...Object.keys(decision.bodyEffect ?? {})].sort());
       expect(card.lose.map((l) => l.resource).sort(), card.decisionId).toEqual([...Object.keys(decision.costs), ...Object.keys(decision.deferredCosts ?? {})].sort());
       // Losses that happen tonight say so.
       for (const line of card.lose) expect(Boolean(line.tonight), `${card.decisionId} ${line.resource}`).toBe(line.resource in (decision.deferredCosts ?? {}));
@@ -64,10 +64,18 @@ describe('picking the three cards', () => {
     expect(new Set(cards.map((c) => c.decisionId)).size).toBe(3);
   });
 
-  it('gives a brand-new player the three Med Station plans', () => {
+  it('gives a brand-new player three of the Med Station plans', () => {
     const cards = pickCards(createSolState(), STARTER);
-    expect(cards.map((c) => c.decisionId).sort()).toEqual(['extra-research-task', 'rest-day', 'skip-maintenance']);
+    expect(cards).toHaveLength(3);
+    for (const card of cards) expect(['extra-research-task', 'rest-day', 'skip-maintenance', 'exercise']).toContain(card.decisionId);
     expect(cards.every((c) => c.urgent.equipment === 'medstation')).toBe(true);
+  });
+
+  it('offers the workout when muscles are weak, and a rest when the crew is tired', () => {
+    const weak = { ...createSolState(), body: { muscleBone: 60, rest: 100 } };
+    expect(pickCards(weak, ALL)[0]!.decisionId).toBe('exercise');
+    const tired = { ...createSolState(), body: { muscleBone: 100, rest: 20 } };
+    expect(Object.keys(findDecision(pickCards(tired, ALL)[0]!.decisionId)!.bodyEffect ?? {})).toContain('rest');
   });
 
   it('never offers a card whose machine is locked', () => {
@@ -175,3 +183,19 @@ describe('the sol flow', () => {
     expect(save.state.status).toBe('complete');
   });
 });
+
+describe("the evening summary and the crew's body", () => {
+  it('lists what a finished workout did for muscles and bones', () => {
+    let save = ok(planSol(newSolSave(), 'exercise'));
+    save = completeJob(save, 'workout');
+    const result = finishSol(save);
+    expect(result.summary?.bodyGave).toEqual({ muscleBone: findDecision('exercise')!.bodyEffect!.muscleBone!.value });
+    expect(result.summary?.science).toBe('exercise');
+  });
+
+  it('a skipped workout gives the body nothing', () => {
+    const result = finishSol(ok(planSol(newSolSave(), 'exercise')));
+    expect(result.summary?.bodyGave).toEqual({});
+  });
+});
+

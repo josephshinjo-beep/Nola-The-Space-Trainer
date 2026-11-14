@@ -1,0 +1,19 @@
+{
+ "hits": {
+  "total": 1,
+  "hits": [
+   {
+    "_source": {
+     "Accession": "OSD-342",
+     "Study Title": "Targeting myostatin/activin A protects against skeletal muscle and bone loss during spaceflight [plasma proteomics]",
+     "Study Publication Title": "Targeting myostatin/activin A protects against skeletal muscle and bone loss during spaceflight",
+     "Study Publication Author List": "Se-Jin Lee  Adam Lehar  Jessica U. Meir  Christina Koch  Andrew Morgan  Lara E. Warren  Renata Rydzik  Daniel W. Youngstrom  Harshpreet Chandok  Joshy George  Joseph Gogain  Michael Michaud  Thomas A. Stoklasek  Yewei Liu  and Emily L. Germain-Lee",
+     "organism": "Mus musculus",
+     "Flight Program": "International Space Station (ISS)",
+     "Study Description": "Among the physiological consequences of extended spaceflight are loss of skeletal muscle and bone mass. One signaling pathway that plays an important role in maintaining muscle and bone homeostasis is that regulated by the secreted signaling proteins, myostatin (MSTN) and activin A. Here, we used both genetic and pharmacological approaches to investigate the effect of targeting MSTN/activin A signaling in mice that were sent to the International Space Station. Wild type mice lost significant muscle and bone mass during the 33 d spent in microgravity. Muscle weights of Mstn -/- mice, which are about twice those of wild type mice, were largely maintained during spaceflight. Systemic inhibition of MSTN/activin A signaling using a soluble form of the activin type IIB receptor (ACVR2B), which can bind each of these ligands, led to dramatic increases in both muscle and bone mass, with effects being comparable in ground and flight mice. Exposure to microgravity and treatment with the soluble receptor each led to alterations in numerous signaling pathways, which were reflected in changes in levels of key signaling components in the blood as well as their RNA expression levels in muscle and bone. These findings have implications for therapeutic strategies to combat the concomitant muscle and bone loss occurring in people afflicted with disuse atrophy on Earth as well as in astronauts in space, especially during prolonged missions.",
+     "Study Public Release Date": 1600214400.0
+    }
+   }
+  ]
+ }
+}

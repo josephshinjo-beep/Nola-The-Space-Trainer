@@ -49,6 +49,7 @@ export const DECISIONS: Decision[] = [
     summary: 'Let the crew rest instead of doing maintenance. The shielding wears down unrepaired.',
     gains: { crewHealth: A.skipMaintenance.crewHealthGain },
     costs: { shielding: A.skipMaintenance.shieldingCost },
+    bodyEffect: { rest: A.skipMaintenance.restGain },
 
     gainsAfterAction: { taskId: 'crew-rest', taskLabel: 'Send the crew to rest at the Med Station' },
   },
@@ -98,11 +99,22 @@ export const DECISIONS: Decision[] = [
   {
     id: 'rest-day',
     title: 'Rest day',
-    summary: 'Give the crew a full day off with an extra recovery meal.',
+    summary: 'Give the crew a full day off with an extra recovery meal. No science gets done.',
     gains: { crewHealth: A.restDay.crewHealthGain },
-    costs: { food: A.restDay.foodCost },
+    costs: { food: A.restDay.foodCost, research: A.restDay.researchCost },
+    bodyEffect: { rest: A.restDay.restGain },
 
     gainsAfterAction: { taskId: 'rest-checkup', taskLabel: 'Give the crew a check-up at the Med Station' },
+  },
+  {
+    id: 'exercise',
+    title: 'Exercise session',
+    summary: 'The crew trains on the treadmill and bike to keep muscles and bones strong. It takes science time and power.',
+    gains: {},
+    costs: { research: A.exercise.researchCost, power: A.exercise.powerCost },
+    bodyEffect: { muscleBone: A.exercise.muscleBoneGain },
+
+    gainsAfterAction: { taskId: 'workout', taskLabel: 'Do the workout at the Med Station' },
   },
   {
     id: 'boost-greenhouse-lights',
@@ -133,7 +145,11 @@ export function validateDecision(decision: Decision): string[] {
   const gains = Object.entries(decision.gains);
   const allCosts = [...Object.entries(decision.costs), ...Object.entries(decision.deferredCosts ?? {})];
 
-  if (gains.length === 0) problems.push('it gives nothing');
+  const body = Object.entries(decision.bodyEffect ?? {});
+  if (gains.length === 0 && body.length === 0) problems.push('it gives nothing');
+  for (const [part, param] of body) {
+    if (!param || !(param.value > 0)) problems.push(`its amount for ${part} must be more than zero`);
+  }
   if (allCosts.length === 0) problems.push('it is free: it costs nothing');
   for (const [resource, param] of [...gains, ...allCosts]) {
     if (!param || !(param.value > 0)) problems.push(`its amount for ${resource} must be more than zero`);

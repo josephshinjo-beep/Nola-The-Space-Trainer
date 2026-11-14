@@ -1,6 +1,6 @@
 import { RESOURCES, SOL_CONFIG as C, type Param, type Resource } from './config';
 import { DECISIONS, findDecision, validateDecision } from './decisions';
-import type { ActionReport, Amounts, Decision, LedgerEntry, NightConditions, Phase, RadiationStorm, Result, SolState, StormChoice } from './types';
+import type { ActionReport, Amounts, BodyPart, Decision, LedgerEntry, NightConditions, Phase, RadiationStorm, Result, SolState, StormChoice } from './types';
 
 /**
  * The sol engine: the rules of a sol-based survival mission, with no screen code.
@@ -34,6 +34,7 @@ function copy(state: SolState): SolState {
     plannedTasks: [...state.plannedTasks],
     tonight: { ...state.tonight, deferred: [...state.tonight.deferred] },
     ledger: [...state.ledger],
+    body: { ...state.body },
     storm: state.storm ? { ...state.storm, event: { ...state.storm.event } } : null,
     stormEventsUsed: [...state.stormEventsUsed],
   };
@@ -75,6 +76,13 @@ function record(state: SolState, phase: Phase, source: string, label: string, ga
   return applied;
 }
 
+/** Adds a decision's body effect (muscles and bones, rest), keeping each between 0 and 100. */
+function applyBody(state: SolState, decision: Decision, share = 1): void {
+  for (const [part, param] of Object.entries(decision.bodyEffect ?? {}) as [BodyPart, Param][]) {
+    state.body[part] = round(Math.min(100, state.body[part] + param.value * share));
+  }
+}
+
 // ---------------------------------------------------------------- starting and choosing
 
 export function createSolState(): SolState {
@@ -93,6 +101,7 @@ export function createSolState(): SolState {
     plannedTasks: [],
     tonight: { heatingLow: false, greenhouseOff: false, deferred: [] },
     ledger: [],
+    body: { muscleBone: C.body.startMuscleBone.value, rest: C.body.startRest.value },
     storm: null,
     stormEventsUsed: [],
   };
@@ -136,6 +145,7 @@ export function choose(state: SolState, decisionId: string): Result<SolState> {
   const immediateGains = decision.gainsAfterAction ? {} : amountsOf(decision.gains);
   const note = decision.gainsAfterAction ? `Reward depends on the action phase: ${decision.gainsAfterAction.taskLabel}.` : undefined;
   record(next, 'decision', decision.id, decision.title, immediateGains, amountsOf(decision.costs), note);
+  if (!decision.gainsAfterAction) applyBody(next, decision);
 
   if (decision.gainsAfterAction) next.plannedTasks.push({ taskId: decision.gainsAfterAction.taskId, label: decision.gainsAfterAction.taskLabel, decisionId: decision.id });
   if (decision.nightEffect === 'heatingLow') next.tonight.heatingLow = true;
@@ -180,11 +190,13 @@ export function resolveActionPhase(state: SolState, report: ActionReport): Resul
     const decision = findDecision(task.decisionId)!;
     const gains = amountsOf(decision.gains);
     if (report.completed.includes(task.taskId)) {
-      record(next, 'action', decision.id, `${task.label}: completed`, gains, {});
+      record(next, 'action', decision.id, `${task.label}: completed`, gains, {}, isEmpty(gains) && decision.bodyEffect ? 'Done: it helps the crew\'s body, not the stores.' : undefined);
+      applyBody(next, decision);
     } else {
       const share = C.action.failedTaskGainShare.value;
       const partial = Object.fromEntries(Object.entries(gains).map(([resource, value]) => [resource, value! * share])) as Amounts;
       record(next, 'action', decision.id, `${task.label}: failed`, partial, {}, 'The task failed, so the reward was lost. The costs were paid when the decision was made.');
+      applyBody(next, decision, share);
     }
   }
   const clampedLoss = Math.min(lost, C.action.maxCrewHealthLoss.value);
@@ -291,11 +303,25 @@ export function endSol(state: SolState, conditions: NightConditions = CLEAR_NIGH
     penalised = true;
   }
 
-  // 6. Recovery after a good night: warm, no shortages, nothing running low.
+  // 6. The crew's body: weightlessness weakens muscles and bones, and
+  //    tiredness builds up. Weak muscles or a very tired crew cost health.
+  const B = C.body;
+  next.body.muscleBone = round(Math.max(0, next.body.muscleBone - B.muscleBoneLossPerSol.value));
+  next.body.rest = round(Math.max(0, next.body.rest - B.restLossPerSol.value));
+  if (next.body.muscleBone < B.lowMuscleBone.value) {
+    record(next, 'night', 'system:deconditioning', 'Weak muscles and bones', {}, { crewHealth: B.deconditioningLoss.value }, `Muscles and bones at ${Math.round(next.body.muscleBone)}%. Exercise helps.`);
+    penalised = true;
+  }
+  if (next.body.rest < B.lowRest.value) {
+    record(next, 'night', 'system:fatigue', 'The crew is too tired', {}, { crewHealth: B.fatigueLoss.value }, `Rest at ${Math.round(next.body.rest)}%. A rest day helps.`);
+    penalised = true;
+  }
+
+  // 7. Recovery after a good night: warm, no shortages, nothing running low.
   const nothingLow = (['oxygen', 'water', 'food', 'power'] as const).every((resource) => next.resources[resource] >= C.warningShare.value * capacity(resource));
   if (!penalised && nothingLow) record(next, 'night', 'system:recovery', 'The crew recovers after a good night', { crewHealth: C.health.recoveryPerSol.value }, {});
 
-  // 7. Next sol, or the end of the mission.
+  // 8. Next sol, or the end of the mission.
   next.decisionsThisSol = [];
   next.tonight = { heatingLow: false, greenhouseOff: false, deferred: [] };
   if (next.resources.crewHealth <= 0) {

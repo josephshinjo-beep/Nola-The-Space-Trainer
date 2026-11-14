@@ -139,6 +139,7 @@ After changing a variable in Vercel you must **redeploy**: existing deployments 
 ```
 api/
 ├── chat.ts            AI backend for Ask NOLA (server only)
+├── astronaut-science.ts  Live check of the NASA OSDR studies behind the Astronaut Science cards (server only)
 ├── space-events.ts    Real solar events from NASA DONKI for radiation storms (server only)
 └── space-weather.ts   NASA DONKI fetch and conversion (server only)
 src/
@@ -192,6 +193,37 @@ Achievements are worked out from these records each time, not stored separately,
 - **One config file.** Every number is in `src/sol/config.ts`, labelled `NASA_BASED` (with its source, for example oxygen use from NASA's BVAD or the surface dose measured by Curiosity) or `SIMPLIFIED` (a game value).
 
 Run its tests with `npx vitest run src/sol`.
+
+## Crew health and Astronaut Science (NASA OSDR)
+
+The sol engine tracks the crew's body as two conditions, each 0–100%, shown in the HUD:
+
+- **Muscles & bones** weaken by 2% every sol (weightlessness). Below 70%, the crew loses 3% health each night.
+- **Rest** drops by 8% every sol (tiredness). Below 40%, the crew loses 3% health each night.
+
+Two decisions look after them, and both cost something real:
+
+- **Do a workout** (exercise session): costs 2 science points (time) and 3 kWh of power (treadmill and bike); +10% muscles & bones once the workout is done at the Med Station.
+- **Have a rest day**: costs 2 science points (a day with no science) and an extra meal; +50% rest. Skipping the maintenance shift also gives +25% rest.
+
+All of these numbers are game values in `SOL_CONFIG.body` and `DECISION_AMOUNTS`, labelled as such. Doing nothing for a whole mission now fails (the crew gets tired and weak); a crew that exercises and rests regularly gets through (both are tested).
+
+**Astronaut Science cards.** When crew health changes, the end-of-sol summary shows a real finding that explains why: weak muscles → a muscle and bone study, tiredness → the body-clock study, radiation (including a storm that hits an unprotected crew) → a radiation study, a finished workout → an exercise study. Every card says **who was studied** (mice on the ISS, volunteers in bed-rest studies on Earth, astronaut data), quotes the study's own words, and cites it: authors, publication title and a link to the study on NASA OSDR.
+
+| Topic | OSDR study | What it found (in the study's words) |
+| --- | --- | --- |
+| Muscles and bones | [OSD-342](https://osdr.nasa.gov/bio/repo/data/studies/OSD-342) | Mice lost significant muscle and bone mass in 33 days on the ISS |
+| Muscles and bones | [OSD-417](https://osdr.nasa.gov/bio/repo/data/studies/OSD-417) | Bone loss in mice in flight, with gut microbe changes |
+| Exercise | [OSD-942](https://osdr.nasa.gov/bio/repo/data/studies/OSD-942) | Exercise counteracted the loss of fitness, muscle and strength in NASA's 70-day bed-rest study |
+| Exercise | [OSD-51](https://osdr.nasa.gov/bio/repo/data/studies/OSD-51) | Exercise cut muscle gene changes by 89% and 96% in a 60-day bed-rest study |
+| Exercise | [OSD-540](https://osdr.nasa.gov/bio/repo/data/studies/OSD-540) | 10 days of leg unloading shrank and weakened the thigh; 21 days of strength exercise restored most of it |
+| Body clock and rest | [OSD-343](https://osdr.nasa.gov/bio/repo/data/studies/OSD-343) | Spaceflight altered circadian rhythm pathways (59 astronauts, the Twins Study and flight samples) |
+| Radiation | [OSD-479](https://osdr.nasa.gov/bio/repo/data/studies/OSD-479) | Simulated deep-space radiation impaired spatial learning in male mice, not females |
+| Radiation | [OSD-984](https://osdr.nasa.gov/bio/repo/data/studies/OSD-984) | Long-term effects on muscle energy proteins 9 months after unloading plus low-dose radiation |
+
+OSDR holds very little on sleep itself, so the "rest" card uses the body-clock finding and says plainly that the study looked at the body clock, not sleep.
+
+**Where the data comes from.** The findings and full citations are in `src/data/astronautScience.json`, built from OSDR's public study search API (`https://osdr.nasa.gov/osdr/data/search?term=OSD-342&type=cgene&size=5`, no key). The recorded answers are kept in `src/data/__fixtures__/osdr/`, and a test checks every quote appears word for word in them. `api/astronaut-science.ts` checks the studies live (cached for a day): if a study's quoted sentences are still in its OSDR description, the card says "Checked live with NASA OSDR today"; otherwise, or offline, it shows the saved copy and says when it was recorded.
 
 ## Talking to Earth: the signal delay
 
@@ -303,6 +335,7 @@ If this goes beyond a hackathon demo to real children, get proper advice on chil
 - All eight lessons' content (well-formed, exactly one right answer per question, every slider activity starts unsolved and can be solved).
 - The knowledge search and NOLA's built-in replies, including the personal-information guard.
 - Space data validation, the NOAA scale thresholds, the NASA conversion and the fallback to simulated data.
+- Crew health and Astronaut Science: exercise and rest costs, nightly body wear, the OSDR route on recorded data, quotes matching the studies, citations, the offline fallback, and which finding explains each health change.
 - Earth communication: Mars distances against NASA's recorded closest approaches, the Moon delay, how the wait is sped up, replies blocked by a broken antenna, training mistakes, and the training questions.
 - The DONKI events route on real recorded NASA data (which events count, host order with and without a key, caching, the 502 answer), the offline archive, and the radiation storm rules (costs, harm, one storm at a time, old saves).
 - The AI backend's request checks and sign-in check.

@@ -1,9 +1,9 @@
-import { Apple, BedDouble, Droplets, FlaskConical, HeartPulse, Lamp, RadioTower, Shield, SunMedium, ThermometerSnowflake, UtensilsCrossed, Wind, Wrench, Zap, type LucideIcon } from 'lucide-react';
+import { Apple, BedDouble, Droplets, Dumbbell, Moon, FlaskConical, HeartPulse, Lamp, RadioTower, Shield, SunMedium, ThermometerSnowflake, UtensilsCrossed, Wind, Wrench, Zap, type LucideIcon } from 'lucide-react';
 import type { SystemId } from '../../features/unlocks/unlockManager';
 import { SOL_CONFIG, type Resource } from '../../sol/config';
 import { DECISIONS, findDecision } from '../../sol/decisions';
 import { whyNot } from '../../sol/engine';
-import type { Decision, SolState } from '../../sol/types';
+import type { BodyPart, Decision, SolState } from '../../sol/types';
 import { findEquipment, type EquipmentId } from '../stationMap';
 
 /**
@@ -30,8 +30,15 @@ export const RESOURCE_LABELS: Record<Resource, ResourceLabel> = {
   research: { name: 'Science points', icon: FlaskConical },
 };
 
+/** Labels for every line a card can show: the seven resources and the crew's body. */
+export const LINE_LABELS: Record<Resource | BodyPart, ResourceLabel> = {
+  ...RESOURCE_LABELS,
+  muscleBone: { name: 'Muscles & bones', icon: Dumbbell },
+  rest: { name: 'Rest', icon: Moon },
+};
+
 export interface CardLine {
-  resource: Resource;
+  resource: Resource | BodyPart;
   text: string;
   /** True for a loss that happens tonight, not straight away. */
   tonight?: boolean;
@@ -87,7 +94,10 @@ export const KID_CARDS: KidCard[] = [
     decisionId: 'skip-maintenance',
     title: 'Take a break from fixing',
     icon: BedDouble,
-    gain: [{ resource: 'crewHealth', text: 'The crew gets a rest.' }],
+    gain: [
+      { resource: 'crewHealth', text: 'The crew gets a rest.' },
+      { resource: 'rest', text: 'Less tired.' },
+    ],
     lose: [{ resource: 'shielding', text: 'The shield gets a bit weaker.' }],
     whyReal: 'Real space stations need repairs every week, and jobs that get skipped pile up.',
     urgent: { equipment: 'medstation', system: 'station-access', text: 'Send the crew to rest at the Med Station.' },
@@ -150,10 +160,28 @@ export const KID_CARDS: KidCard[] = [
     decisionId: 'rest-day',
     title: 'Have a rest day',
     icon: BedDouble,
-    gain: [{ resource: 'crewHealth', text: 'The crew feels much better.' }],
-    lose: [{ resource: 'food', text: 'An extra meal.' }],
+    gain: [
+      { resource: 'crewHealth', text: 'The crew feels much better.' },
+      { resource: 'rest', text: 'A long, proper rest.' },
+    ],
+    lose: [
+      { resource: 'food', text: 'An extra meal.' },
+      { resource: 'research', text: 'A day with no science.' },
+    ],
     whyReal: 'Real astronauts get days off, because tired crews make more mistakes.',
     urgent: { equipment: 'medstation', system: 'station-access', text: 'Give the crew a check-up at the Med Station.' },
+  },
+  {
+    decisionId: 'exercise',
+    title: 'Do a workout',
+    icon: Dumbbell,
+    gain: [{ resource: 'muscleBone', text: 'Stronger muscles and bones.' }],
+    lose: [
+      { resource: 'research', text: 'Time that could be science.' },
+      { resource: 'power', text: 'Power for the treadmill and bike.' },
+    ],
+    whyReal: 'In a NASA bed-rest study, exercise kept volunteers’ muscles strong (NASA OSDR study OSD-942).',
+    urgent: { equipment: 'medstation', system: 'station-access', text: 'Do the workout at the Med Station.' },
   },
   {
     decisionId: 'boost-greenhouse-lights',
@@ -200,6 +228,14 @@ function needs(state: SolState): Partial<Record<Resource, number>> {
   };
 }
 
+/** How badly the crew's body needs help (0 = fine). Weak muscles or tiredness push exercise and rest cards up. */
+function bodyNeeds(state: SolState): Record<BodyPart, number> {
+  return {
+    muscleBone: Math.min(1, (100 - state.body.muscleBone) / 40),
+    rest: Math.min(1, (100 - state.body.rest) / 80),
+  };
+}
+
 /**
  * Picks up to three cards for this sol. A card can appear only if its
  * urgent job's room is unlocked and its decision can be afforded now.
@@ -207,10 +243,10 @@ function needs(state: SolState): Partial<Record<Resource, number>> {
  * three cards try to help with three different things.
  */
 export function pickCards(state: SolState, unlocked: readonly SystemId[], count = 3): KidCard[] {
-  const need = needs(state);
+  const need: Partial<Record<Resource | BodyPart, number>> = { ...needs(state), ...bodyNeeds(state) };
   const scored = KID_CARDS.map((card, index) => {
     const decision = findDecision(card.decisionId) as Decision;
-    const helps = Object.keys(decision.gains) as Resource[];
+    const helps = [...Object.keys(decision.gains), ...Object.keys(decision.bodyEffect ?? {})] as (Resource | BodyPart)[];
     // A small rotation by sol, so ties do not always show the same cards.
     const rotation = ((index + state.sol * 5) % KID_CARDS.length) / (KID_CARDS.length * 100);
     return { card, helps, score: Math.max(...helps.map((resource) => need[resource] ?? 0)) + rotation };
