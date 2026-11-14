@@ -14,3 +14,6 @@ interface ImportMetaEnv {
 interface ImportMeta {
   readonly env: ImportMetaEnv;
 }
+
+/** The short Git commit this build was made from, so a stale deployment is easy to spot. */
+declare const __APP_VERSION__: string;

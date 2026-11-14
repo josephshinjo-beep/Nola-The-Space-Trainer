@@ -22,7 +22,7 @@ export const lesson: Lesson = {
     {
       title: 'How is food stored in space?',
       icon: Package,
-      keywords: 'eat eating meal meals dinner kind what do astronauts eat',
+      keywords: 'eat eating meal meals dinner',
       text: "Most space food is freeze-dried (just add water) or heat-treated and sealed in pouches so it lasts for months without a fridge. Crumbs are a hazard because they float into equipment, so astronauts use tortillas where you'd use bread.",
       fact: { kind: 'today', text: 'Salt and pepper come as liquids so the grains cannot float away.' },
     },

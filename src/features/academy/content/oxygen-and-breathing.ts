@@ -18,6 +18,7 @@ export const lesson: Lesson = {
     {
       title: 'How do astronauts get breathable air?',
       icon: Wind,
+      keywords: 'get oxygen air breathe breathing supply astronauts',
       text: "The air inside the International Space Station is made to match Earth's: about 21% oxygen and 78% nitrogen, at normal pressure. Oxygen is made on board, topped up from tanks delivered by cargo ships, with emergency supplies kept in reserve.",
     },
     {

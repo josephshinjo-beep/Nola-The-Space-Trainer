@@ -347,14 +347,21 @@ export async function POST(request: Request): Promise<Response> {
   }
 }
 
+/** At most one live test every 20 seconds, so the test page cannot be used to burn quota. */
+let lastLiveTest = 0;
+
 /**
  * Set-up check. Open /api/chat in a browser to see whether the AI is
  * configured. It asks Google for the list of models (which costs nothing)
  * to confirm the key works. It never returns the key.
+ *
+ * Open /api/chat?test=1 to also send Gemini one tiny real question and
+ * see exactly what comes back: the answer, how long it took, or the error.
  */
-export async function GET(): Promise<Response> {
+export async function GET(request?: Request): Promise<Response> {
   const apiKey = process.env.GEMINI_API_KEY;
   const report: Record<string, unknown> = {
+    version: (process.env.VERCEL_GIT_COMMIT_SHA ?? 'local').slice(0, 7),
     geminiKey: apiKey ? 'set' : 'MISSING: add GEMINI_API_KEY',
     firebaseProjectId: firebaseProjectId() || 'MISSING: add FIREBASE_PROJECT_ID',
     modelsTried: modelsToTry(),
@@ -364,13 +371,13 @@ export async function GET(): Promise<Response> {
   try {
     const response = await fetch(`${GEMINI_URL}?pageSize=200`, { headers: { 'x-goog-api-key': apiKey }, signal: AbortSignal.timeout(12_000) });
     if (!response.ok) {
-      return json(200, { ...report, ready: false, keyAccepted: false, problem: `Google rejected the key (status ${response.status}). Check it was copied in full, with no spaces or quote marks.` });
+      const error = await toGeminiError(response);
+      return json(200, { ...report, ready: false, keyAccepted: false, problem: `Google rejected the key (status ${response.status}).`, googleSaid: error.detail });
     }
     const data = (await response.json()) as { models?: { name?: string; supportedGenerationMethods?: string[] }[] };
     const usable = (data.models ?? []).filter((model) => model.supportedGenerationMethods?.includes('generateContent')).map((model) => (model.name ?? '').replace(/^models\//, ''));
     const chosen = modelsToTry().find((model) => usable.includes(model)) ?? null;
-    return json(200, {
-      ...report,
+    Object.assign(report, {
       keyAccepted: true,
       modelThatWillBeUsed: chosen ?? 'NONE of the models above are available to this key',
       someAvailableModels: usable.filter((name) => name.includes('flash')).slice(0, 8),
@@ -379,4 +386,26 @@ export async function GET(): Promise<Response> {
   } catch (error) {
     return json(200, { ...report, ready: false, problem: `Could not reach Google: ${error instanceof Error ? error.message : 'unknown error'}` });
   }
+
+  const wantsTest = request ? new URL(request.url).searchParams.has('test') : false;
+  if (wantsTest) {
+    if (Date.now() - lastLiveTest < 20_000) {
+      report.liveTest = 'Skipped: a test ran a moment ago. Wait 20 seconds and reload.';
+    } else {
+      lastLiveTest = Date.now();
+      const started = Date.now();
+      try {
+        const answer = await askGeminiWithFallback({ message: 'In one short sentence, why is the sky dark in space?', history: [], passages: [], context: '' }, apiKey);
+        report.liveTest = { worked: answer !== null, seconds: (Date.now() - started) / 1000, model: workingModel, answer: answer ?? 'Gemini returned no text (blocked or empty).' };
+      } catch (error) {
+        report.liveTest = {
+          worked: false,
+          seconds: (Date.now() - started) / 1000,
+          error: isTimeout(error) ? 'Every model took too long to answer.' : error instanceof GeminiError ? `Google answered ${error.status} (${error.reason || 'no reason given'})` : 'Unexpected error',
+          googleSaid: error instanceof GeminiError ? error.detail : error instanceof Error ? error.message.slice(0, 200) : '',
+        };
+      }
+    }
+  }
+  return json(200, report);
 }

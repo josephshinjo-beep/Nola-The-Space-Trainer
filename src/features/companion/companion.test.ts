@@ -9,7 +9,8 @@ import { EQUIPMENT, ROOMS, buildWalkGrid, standingSpot, TILE } from '../../game/
 import { createInitialState } from '../../simulation/engine';
 import { MISSIONS } from '../../simulation/missions';
 import { askNola, checkAiSetup, resetAiAvailability } from './chatService';
-import { loadKnowledge, searchKnowledge, suggestQuestions, tokenize } from './knowledge';
+import corpus from './corpus/space-gk.json';
+import { corpusToPassage, loadKnowledge, searchKnowledge, suggestQuestions, tokenize } from './knowledge';
 import { buildContext, builtInReply, describeContext, OFF_TOPIC_REPLY, type CompanionContext } from './responder';
 
 const NO_CONTEXT: CompanionContext = { modulesCompleted: 0, nextModuleTitle: 'Understanding Space', missionTitle: null, nextTask: null, warnings: [], hasStation: false };
@@ -25,6 +26,7 @@ describe('knowledge search', () => {
   it('builds the knowledge base from all eight lessons plus app help', async () => {
     const passages = await loadKnowledge();
     expect(passages.length).toBeGreaterThanOrEqual(8 * 5 + 6);
+    expect(passages.filter((p) => p.curated).length).toBeGreaterThanOrEqual(8 * 5 + 6 + 30);
     expect(new Set(passages.map((p) => p.id)).size).toBe(passages.length);
   });
 
@@ -70,6 +72,37 @@ describe('knowledge search', () => {
     expect(reply.text).toMatch(/Were you asking about one of these/);
     expect(reply.suggestions?.length).toBeGreaterThan(0);
     expect(suggestQuestions(passages, 'who won the football match')).toEqual([]);
+  });
+
+  it('includes the space general-knowledge corpus, well formed', async () => {
+    expect(corpus).toHaveLength(541);
+    expect(new Set(corpus.map((entry) => entry.id)).size).toBe(541);
+    for (const entry of corpus) {
+      expect(entry.text.length, entry.id).toBeGreaterThan(40);
+      expect(entry.topic.length, entry.id).toBeGreaterThan(3);
+      expect(entry.text, entry.id).not.toMatch(/https?:\/\/|<script|ignore (all|previous)/i);
+    }
+    const passages = await loadKnowledge();
+    expect(passages.length).toBeGreaterThan(541 + 80);
+    // "Question: ... Answer: ..." entries are split into a title and an answer.
+    const qa = corpusToPassage({ id: 'x', category: 'Direct Q&A Pairs', topic: 't', entities: ['Sun'], text: 'Question: Which is larger, the Sun or Earth? Answer: The Sun is vastly larger.' });
+    expect(qa).toMatchObject({ title: 'Which is larger, the Sun or Earth?', text: 'The Sun is vastly larger.' });
+  });
+
+  it('answers from the corpus, but prefers hand-written notes when both fit', async () => {
+    const passages = await loadKnowledge();
+    const top = (question: string) => searchKnowledge(passages, question)[0]?.passage;
+    expect(top('which is bigger the sun or jupiter')?.text).toMatch(/Sun/);
+    expect(top('which is bigger the sun or jupiter')?.source.label).toMatch(/Space knowledge base/);
+    expect(top('who founded isro')?.text).toMatch(/Vikram Sarabhai/);
+    expect(top('what is the crab nebula')?.text).toMatch(/supernova/i);
+    expect(top("what is kepler's first law")?.text).toMatch(/ellip/i);
+    // Hand-written, child-friendly answers still win for the questions they cover.
+    expect(top('which is bigger earth or mars')?.curated).toBe(true);
+    expect(top('what is hydroponics')?.source.to).toBe('/academy/food-and-agriculture');
+    expect(top('how do astronauts get oxygen')?.source.to).toBe('/academy/oxygen-and-breathing');
+    expect(top('How do astronauts get oxygen?')?.title).toMatch(/breathable air|oxygen supply system/);
+    expect(top('why do astronauts float')?.title).toBe('What is microgravity?');
   });
 
   it('returns nothing for questions outside its knowledge', async () => {

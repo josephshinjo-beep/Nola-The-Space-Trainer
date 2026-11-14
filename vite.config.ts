@@ -1,3 +1,4 @@
+import { execSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { resolve } from 'node:path';
 import tailwindcss from '@tailwindcss/vite';
@@ -48,8 +49,20 @@ function localApi(): Plugin {
   };
 }
 
+/** The commit being built: Vercel provides it; locally it is read from Git. */
+function appVersion(): string {
+  const fromVercel = process.env.VERCEL_GIT_COMMIT_SHA;
+  if (fromVercel) return fromVercel.slice(0, 7);
+  try {
+    return execSync('git rev-parse --short=7 HEAD', { stdio: ['ignore', 'pipe', 'ignore'] }).toString().trim();
+  } catch {
+    return 'unknown';
+  }
+}
+
 export default defineConfig({
   plugins: [react(), tailwindcss(), localApi()],
+  define: { __APP_VERSION__: JSON.stringify(appVersion()) },
   test: {
     include: ['src/**/*.test.ts'],
   },

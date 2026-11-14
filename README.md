@@ -53,7 +53,7 @@ Open the address it prints (usually http://localhost:5173).
 
 The two server functions in `api/` also run under `npm run dev`. To use the AI chat locally, add `GEMINI_API_KEY=your-key` to `.env.local` and restart the dev server. Without a key, NOLA uses its built-in answers.
 
-**Checking the AI set-up:** open `/api/chat` in a browser (for example http://localhost:5173/api/chat, or the same path on your deployed site). It reports whether the key is set, whether Google accepts it and which model will be used. It never shows the key. The Ask NOLA page also shows a line under the chat saying whether the AI is connected and, if not, why.
+**Checking the AI set-up:** open `/api/chat?test=1` to also send Gemini one tiny real question and see the answer, the time it took, or Google's exact error. Open `/api/chat` in a browser (for example http://localhost:5173/api/chat, or the same path on your deployed site). It reports whether the key is set, whether Google accepts it and which model will be used. It never shows the key. The Ask NOLA page shows the app version at the bottom, so you can check the site is running the latest code. The page also shows a line under the chat saying whether the AI is connected and, if not, why.
 
 ### One-time Firebase console setup
 
@@ -196,7 +196,7 @@ To add another dataset during the hackathon: write a provider that returns `Envi
 
 Every question goes through the same steps:
 
-1. **Search.** `knowledge.ts` finds the most relevant passages in NOLA's knowledge base, which is built from the Academy's lesson cards plus a few entries about the app. This is the retrieval step of RAG (retrieval-augmented generation). It is a keyword search that runs in the browser.
+1. **Search.** `knowledge.ts` finds the most relevant passages in NOLA's knowledge base: the Academy's lesson cards, NOLA's space notes (`spaceFacts.ts`), help about the app, and a 541-entry space general-knowledge corpus (`src/features/companion/corpus/space-gk.json`). Hand-written, child-friendly passages are preferred when they fit as well as a corpus entry. This is the retrieval step of RAG (retrieval-augmented generation). It is a keyword search that runs in the browser.
 2. **Answer.** If the AI backend is available, the question, the passages and a short situation summary are sent to `api/chat.ts`, which asks the AI model to answer using that material. Otherwise NOLA replies with the best passage directly.
 3. **Cite.** Replies link to the lesson they came from. AI replies are labelled "AI answer".
 

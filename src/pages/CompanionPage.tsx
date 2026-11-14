@@ -31,7 +31,9 @@ export function CompanionPage() {
   const [draft, setDraft] = useState('');
   const [thinking, setThinking] = useState(false);
   const [aiStatus, setAiStatus] = useState<AiStatus>(getAiStatus);
-  const [knowledge, setKnowledge] = useState<Passage[]>([]);
+  // NOLA's notes, loaded once. Kept as a promise so a question asked straight
+  // away waits for them instead of being answered without them.
+  const knowledgeLoad = useRef<Promise<Passage[]> | null>(null);
   // The saved station, loaded once. Kept as a promise so a question asked
   // straight away waits for it instead of answering without it.
   const stationLoad = useRef<Promise<StationState | null>>(Promise.resolve(null));
@@ -41,9 +43,8 @@ export function CompanionPage() {
   // NOLA's knowledge base, and a read-only look at the saved station for hints.
   useEffect(() => {
     let cancelled = false;
-    loadKnowledge()
-      .then((passages) => !cancelled && setKnowledge(passages))
-      .catch((error) => console.error('Could not load knowledge', error));
+    knowledgeLoad.current = loadKnowledge();
+    knowledgeLoad.current.catch((error) => console.error('Could not load knowledge', error));
     if (user) {
       stationLoad.current = loadSimulation(user.uid).catch((error) => {
         console.error('Could not load station', error);
@@ -69,6 +70,19 @@ export function CompanionPage() {
     setMessages((list) => [...list, { id: nextId.current++, from: 'student', text: message }]);
     setThinking(true);
     const station = await stationLoad.current;
+    // If the notes failed to load (for example a dropped connection), try once more now.
+    const knowledge = await (knowledgeLoad.current ?? loadKnowledge()).catch(() => {
+      knowledgeLoad.current = loadKnowledge();
+      return knowledgeLoad.current.catch(() => null);
+    });
+    if (!knowledge) {
+      setMessages((list) => [
+        ...list,
+        { id: nextId.current++, from: 'nola', reply: { text: "I couldn't load my space notes just now. Please check your internet connection and refresh the page.", mood: 'thinking', sources: [], origin: 'built-in' } },
+      ]);
+      setThinking(false);
+      return;
+    }
     const reply = await askNola({
       message,
       history,
@@ -139,12 +153,18 @@ export function CompanionPage() {
                   {item.reply.sources.length > 0 && (
                     <p className="mt-3 flex flex-wrap items-center gap-2 text-base font-semibold">
                       <BookOpen aria-hidden="true" size={18} />
-                      Read more:
-                      {item.reply.sources.map((source) => (
-                        <Link key={source.to + source.label} to={source.to} className="rounded-full border-2 border-void/30 px-3 py-0.5 underline-offset-4 hover:underline">
-                          {source.label}
-                        </Link>
-                      ))}
+                      Source:
+                      {item.reply.sources.map((source) =>
+                        source.to ? (
+                          <Link key={source.label} to={source.to} className="rounded-full border-2 border-void/30 px-3 py-0.5 underline-offset-4 hover:underline">
+                            {source.label}
+                          </Link>
+                        ) : (
+                          <span key={source.label} className="rounded-full border-2 border-void/20 px-3 py-0.5">
+                            {source.label}
+                          </span>
+                        ),
+                      )}
                     </p>
                   )}
                   {item.reply.suggestions && item.reply.suggestions.length > 0 && (
@@ -213,7 +233,10 @@ export function CompanionPage() {
 
       <p className="flex items-start gap-2 text-base text-mist">
         <ShieldCheck aria-hidden="true" size={20} className="mt-0.5 shrink-0 text-glow" />
+        <span>
         Stay safe: never share personal details like your full name, address, school or passwords. This chat is not saved. NOLA is a robot and can make mistakes, so check anything important in your lessons.
+        <span className="mt-1 block text-sm" data-testid="app-version">App version {__APP_VERSION__}</span>
+        </span>
       </p>
     </div>
   );

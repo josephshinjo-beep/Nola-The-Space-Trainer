@@ -14,7 +14,8 @@ import type { NolaMood } from './NolaMascot';
 
 export interface ReplySource {
   label: string;
-  to: string;
+  /** A page in the app to read more, when there is one. */
+  to?: string;
 }
 
 export interface Reply {

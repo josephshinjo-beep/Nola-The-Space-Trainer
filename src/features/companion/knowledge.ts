@@ -22,8 +22,10 @@ export interface Passage {
   text: string;
   /** Extra search words that count like title words. */
   keywords?: string;
-  /** Where the student can read more. */
-  source: { label: string; to: string };
+  /** Where the answer comes from. `to` is a page in the app to read more, when there is one. */
+  source: { label: string; to?: string };
+  /** Hand-written for students (lessons, NOLA's notes, app help). These are preferred over reference entries. */
+  curated?: boolean;
 }
 
 const APP_HELP: Passage[] = [
@@ -65,24 +67,61 @@ const APP_HELP: Passage[] = [
   },
 ];
 
+interface CorpusEntry {
+  id: string;
+  category: string;
+  topic: string;
+  entities: string[];
+  text: string;
+}
+
+/**
+ * Turns one entry of the space general-knowledge corpus into a passage.
+ * Entries written as "Question: ... Answer: ..." are split so the question
+ * becomes the title and only the answer is shown.
+ */
+export function corpusToPassage(entry: CorpusEntry): Passage {
+  const qa = /^Question:\s*(.+?)\s*Answer:\s*([\s\S]+)$/.exec(entry.text);
+  return {
+    id: entry.id,
+    title: qa ? qa[1]! : entry.topic,
+    text: qa ? qa[2]! : entry.text,
+    keywords: `${entry.topic} ${entry.entities.join(' ')}`,
+    source: { label: `Space knowledge base: ${entry.category}` },
+  };
+}
+
 let cache: Promise<Passage[]> | null = null;
 
-/** Builds the knowledge base from every lesson's cards. Loaded once, on first use. */
+/**
+ * Builds the knowledge base: every lesson card, NOLA's space notes, the app
+ * help, and the space general-knowledge corpus (corpus/space-gk.json).
+ * Loaded once, on first use. If loading fails it is tried again next time.
+ */
 export function loadKnowledge(): Promise<Passage[]> {
-  cache ??= Promise.all(
-    CURRICULUM.map(async (module) => {
-      const lesson = await loadLesson(module.id);
-      return lesson.cards.map(
-        (card, index): Passage => ({
-          id: `${module.id}-${index}`,
-          title: card.title,
-          text: card.fact ? `${card.text} ${card.fact.text}` : card.text,
-          keywords: card.keywords,
-          source: { label: `Module ${module.number}: ${module.title}`, to: `/academy/${module.id}` },
-        }),
-      );
-    }),
-  ).then((groups) => [...groups.flat(), ...SPACE_FACTS, ...APP_HELP]);
+  cache ??= Promise.all([
+    Promise.all(
+      CURRICULUM.map(async (module) => {
+        const lesson = await loadLesson(module.id);
+        return lesson.cards.map(
+          (card, index): Passage => ({
+            id: `${module.id}-${index}`,
+            title: card.title,
+            text: card.fact ? `${card.text} ${card.fact.text}` : card.text,
+            keywords: card.keywords,
+            source: { label: `Module ${module.number}: ${module.title}`, to: `/academy/${module.id}` },
+            curated: true,
+          }),
+        );
+      }),
+    ),
+    import('./corpus/space-gk.json').then((file) => (file.default as CorpusEntry[]).map(corpusToPassage)),
+  ])
+    .then(([lessons, corpus]) => [...lessons.flat(), ...[...SPACE_FACTS, ...APP_HELP].map((passage) => ({ ...passage, curated: true })), ...corpus])
+    .catch((error) => {
+      cache = null;
+      throw error;
+    });
   return cache;
 }
 
@@ -127,19 +166,43 @@ interface Scored extends SearchHit {
   related: boolean;
 }
 
+interface IndexedPassage {
+  passage: Passage;
+  title: Set<string>;
+  keywords: Set<string>;
+  text: string[];
+  /** Every word of the passage, for quick "does it contain this?" checks. */
+  all: Set<string>;
+}
+
+/** The word index is built once per knowledge base, not on every question. */
+const indexCache = new WeakMap<readonly Passage[], IndexedPassage[]>();
+
+function indexOf(passages: readonly Passage[]): IndexedPassage[] {
+  let indexed = indexCache.get(passages);
+  if (!indexed) {
+    indexed = passages.map((passage) => {
+      const title = new Set(tokenize(passage.title));
+      const keywords = new Set(tokenize(passage.keywords ?? ''));
+      const text = tokenize(passage.text);
+      return { passage, title, keywords, text, all: new Set([...title, ...keywords, ...text]) };
+    });
+    indexCache.set(passages, indexed);
+  }
+  return indexed;
+}
+
+/** Hand-written passages win over reference entries that match about equally well. */
+const CURATED_BOOST = 1.8;
+
 function scoreAll(passages: readonly Passage[], question: string): Scored[] {
   const queryTokens = [...new Set(tokenize(question))];
   if (queryTokens.length === 0) return [];
 
-  const indexed = passages.map((passage) => ({
-    passage,
-    title: new Set(tokenize(passage.title)),
-    keywords: new Set(tokenize(passage.keywords ?? '')),
-    text: tokenize(passage.text),
-  }));
+  const indexed = indexOf(passages);
   const spread = new Map<string, number>();
   for (const token of queryTokens) {
-    spread.set(token, indexed.filter((entry) => entry.title.has(token) || entry.keywords.has(token) || entry.text.includes(token)).length);
+    spread.set(token, indexed.filter((entry) => entry.all.has(token)).length);
   }
   // Squared so that words found in many passages count for very little.
   const rarity = (token: string) => {
@@ -157,10 +220,10 @@ function scoreAll(passages: readonly Passage[], question: string): Scored[] {
     let distinctive = false;
     for (const token of queryTokens) {
       const inTitle = entry.title.has(token) || entry.keywords.has(token);
+      if (!entry.all.has(token)) continue;
       const count = entry.text.filter((word) => word === token).length;
-      if (!inTitle && count === 0) continue;
       matched += 1;
-      if (entry.title.has(token)) titleMatches += 1;
+      if (entry.title.has(token) || entry.keywords.has(token)) titleMatches += 1;
       keyHit ||= inTitle;
       distinctive ||= !isCommon(token);
       score += rarity(token) * ((inTitle ? 2.5 : 0) + (count > 0 ? 1 + Math.log(count) : 0));
@@ -168,12 +231,20 @@ function scoreAll(passages: readonly Passage[], question: string): Scored[] {
     if (score <= 0) continue;
     const coverage = matched / queryTokens.length;
     // A title made up mostly of the question's words is a strong sign of the right passage.
-    const titleCoverage = entry.title.size > 0 ? titleMatches / entry.title.size : 0;
+    // Keyword hits count like title hits, so a card tagged with the question's words can win.
+    const titleCoverage = entry.title.size > 0 ? Math.min(1, titleMatches / entry.title.size) : 0;
     // Confident only if enough of the question matched AND the match rests on a
     // telling word, not just on everyday ones such as "Earth" or "space".
-    const enough = coverage > 0.5 || (keyHit && coverage >= 0.34);
+    // More than half the question must match. Exactly half is enough only for a
+    // longer question that also hits the passage's title or keywords.
+    const enough = coverage > 0.5 || (keyHit && coverage >= 0.5 && queryTokens.length >= 4);
     const confident = enough && (distinctive || (titleCoverage >= 0.6 && coverage >= 0.75));
-    scored.push({ passage: entry.passage, score: score * (0.5 + coverage) * (1 + titleCoverage), confident, related: keyHit && coverage >= 0.34 });
+    scored.push({
+      passage: entry.passage,
+      score: score * (0.5 + coverage) * (1 + titleCoverage) * (entry.passage.curated ? CURATED_BOOST : 1),
+      confident,
+      related: keyHit && coverage >= 0.34,
+    });
   }
   return scored.sort((x, y) => y.score - x.score);
 }
