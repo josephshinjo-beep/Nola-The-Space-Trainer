@@ -283,7 +283,7 @@ describe('AI backend (api/chat)', () => {
         return seen.length < 2 ? Response.json({}, { status: 404 }) : Response.json(reply('Hello from the second model.'));
       }) as unknown as typeof fetch;
       expect(await askGeminiWithFallback(chat, 'k', fetcher)).toBe('Hello from the second model.');
-      expect(seen).toEqual(['gemini-2.5-flash', 'gemini-2.5-flash-lite']);
+      expect(seen).toEqual(['gemini-3.8-flash', 'gemini-2.5-flash']);
     });
 
     it('moves on when a model is too slow, busy or out of quota', async () => {

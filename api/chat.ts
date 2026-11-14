@@ -31,7 +31,7 @@ export const maxDuration = 30;
  * Models to try, in order. Google renames and retires models, so if one is
  * not found the next is tried. AI_MODEL, when set, goes first.
  */
-const MODEL_CHOICES = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-flash-latest', 'gemini-2.0-flash'];
+const MODEL_CHOICES = ['gemini-3.8-flash', 'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-flash-latest', 'gemini-2.0-flash'];
 
 /** How long to wait for one model before moving on to the next. */
 const MODEL_TIMEOUT_MS = 9_000;

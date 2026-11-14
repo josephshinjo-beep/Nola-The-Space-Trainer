@@ -83,7 +83,7 @@ Vercel hosts the website and runs the two small server functions in `api/`.
 | `VITE_FIREBASE_API_KEY` and the other five `VITE_FIREBASE_*` values | The app | Same values as `.env.local` |
 | `FIREBASE_PROJECT_ID` | AI chat (optional) | Only needed if it differs from `VITE_FIREBASE_PROJECT_ID`, which is used by default |
 | `GEMINI_API_KEY` | AI chat | Secret. Create one in [Google AI Studio](https://aistudio.google.com/apikey). Without it NOLA uses built-in answers only |
-| `AI_MODEL` | AI chat (optional) | A Gemini model name to try first. Otherwise `gemini-2.5-flash`, `gemini-flash-latest` and `gemini-2.0-flash` are tried in turn |
+| `AI_MODEL` | AI chat (optional) | A Gemini model name to try first. Otherwise `gemini-3.8-flash` is tried first, then `gemini-2.5-flash`, `gemini-2.5-flash-lite`, `gemini-flash-latest` and `gemini-2.0-flash` as backups |
 | `VITE_SPACE_DATA_SOURCE` | Real NASA data (optional) | Set to `nasa` to use NASA data; leave unset for simulated data |
 | `NASA_API_KEY` | Real NASA data (optional) | Free from [api.nasa.gov](https://api.nasa.gov). Without it NASA's low-limit `DEMO_KEY` is used |
 
