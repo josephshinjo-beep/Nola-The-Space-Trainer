@@ -6,7 +6,7 @@ import { SIM } from '../../simulation/config';
 import { energyFlow, FAULT_INFO, isSunlit, machineStatus } from '../../simulation/engine';
 import type { Action, ActionResult, FaultId, MachineId, StationState } from '../../simulation/types';
 import { findEquipment, type EquipmentId } from '../stationMap';
-import { RepairGame } from './MiniGames';
+import { FaultResponse, SitePicker } from '../comms/EarthComms';
 
 interface PanelProps {
   id: EquipmentId;
@@ -16,6 +16,8 @@ interface PanelProps {
   onClose: () => void;
   /** Today's urgent sol job, when it happens at this machine. */
   urgent?: { text: string; done: boolean; onDo: () => void } | null;
+  /** A message went to Mission Control: close the panel so time can pass, and say so. */
+  onSent?: (text: string) => void;
 }
 
 /** A labelled note that says whether something is real science or a game simplification. */
@@ -47,7 +49,7 @@ const formatHours = (hours: number) => (hours < 1 ? `${Math.max(1, Math.round(ho
  * broken, the repair mini-game. All of it is ordinary web content, so it
  * works with a keyboard and a screen reader.
  */
-export function EquipmentPanel({ id, state, dispatch, weather, onClose, urgent }: PanelProps) {
+export function EquipmentPanel({ id, state, dispatch, weather, onClose, urgent, onSent }: PanelProps) {
   const item = findEquipment(id);
   const [message, setMessage] = useState<string | null>(null);
   const fault: FaultId | undefined = item.faults.find((candidate) => state.faults.includes(candidate));
@@ -82,7 +84,7 @@ export function EquipmentPanel({ id, state, dispatch, weather, onClose, urgent }
           <span aria-hidden="true">⚠ </span>
           {FAULT_INFO[fault].alert}
         </p>
-        <RepairGame fault={fault} onWin={() => run({ type: 'repair', fault })} />
+        <FaultResponse key={fault} fault={fault} state={state} dispatch={dispatch} onSent={(text) => (onSent ? onSent(text) : setMessage(text))} onRepaired={setMessage} />
       </>
     );
   } else {
@@ -187,12 +189,15 @@ export function EquipmentPanel({ id, state, dispatch, weather, onClose, urgent }
           <>
             <dl>
               <Reading label="Link to Earth" value="Connected" />
+              <Reading label="Messages waiting for a reply" value={String(state.earthCalls.filter((call) => !call.replied).length)} />
               <Reading label="Next cargo ship" value={`in about ${formatHours(hoursUntil(state, state.nextSupplyAt))}`} />
             </dl>
             <Button disabled={wait > 0} onClick={() => run({ type: 'requestSupply' })}>
               {wait > 0 ? `Next request possible in ${formatHours(wait)}` : 'Request a supply delivery'}
             </Button>
-            <Note kind="real">Radio signals travel at the speed of light. They reach the Moon in about 1.3 seconds, but take 3 to 22 minutes to reach Mars.</Note>
+            <SitePicker state={state} dispatch={dispatch} onMessage={setMessage} />
+            <Note kind="real">Radio signals travel at the speed of light. They reach the Moon in about 1.3 seconds, but take 3 to 22 minutes to reach Mars, depending on where the two planets are in their orbits.</Note>
+            <Note kind="game">The delays shown are real. Only the wait for a reply is sped up in the game.</Note>
           </>
         );
         break;

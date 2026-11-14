@@ -2,7 +2,7 @@ import type { StationStats } from '../features/academy/achievements';
 import { SYSTEM_IDS, type SystemId } from '../features/unlocks/unlockManager';
 import { SIM } from './config';
 import { completedMissionCount, currentMission, isMissionComplete, MISSIONS } from './missions';
-import type { Action, ActionResult, FaultId, LogTone, MachineId, StationState, StepInputs } from './types';
+import type { Action, ActionResult, FaultId, LogTone, MachineId, ResourceId, StationState, StepInputs } from './types';
 
 /**
  * The simulation engine: the rules that move the station forward in time
@@ -34,6 +34,26 @@ export const MACHINE_INFO: Record<MachineId, { name: string; system: SystemId }>
   waterRecycler: { name: 'Water Recycler', system: 'water' },
   thermalControl: { name: 'Thermal Control', system: 'temperature' },
 };
+
+/** Which store a wrong repair step wastes. */
+export const MISTAKE_RESOURCE: Record<FaultId, ResourceId> = {
+  'oxygen-generator': 'oxygen',
+  'co2-filter': 'oxygen',
+  'water-leak': 'water',
+  'panel-drift': 'energy',
+  'thermal-fault': 'energy',
+  antenna: 'energy',
+};
+
+/**
+ * Station minutes until Mission Control's reply arrives: the real round
+ * trip (there and back), played at station speed, except that very short
+ * delays play in real time.
+ */
+export function earthWaitMinutes(oneWaySeconds: number): number {
+  const roundTrip = 2 * oneWaySeconds;
+  return Math.max(roundTrip / 60, Math.min(roundTrip, SIM.earthWaitMinRealSeconds) * SIM.minutesPerRealSecond);
+}
 
 export const FAULT_INFO: Record<FaultId, { system: SystemId; alert: string; fixed: string }> = {
   'oxygen-generator': { system: 'oxygen', alert: 'The Oxygen Generator has stopped! Go to Oxygen Control to restart it.', fixed: 'Oxygen Generator restarted.' },
@@ -69,6 +89,7 @@ function copy(state: StationState): StationState {
     completedTasks: [...state.completedTasks],
     triggered: [...state.triggered],
     stats: { ...state.stats },
+    earthCalls: (state.earthCalls ?? []).map((call) => ({ ...call, resourcesAtSend: { ...call.resourcesAtSend } })),
     log: [...state.log],
   };
 }
@@ -145,6 +166,8 @@ export function createInitialState(unlocked: readonly SystemId[], seed = 1): Sta
     completedTasks: [],
     triggered: [],
     stats: { stormsSheltered: 0, harvests: 0, repairs: 0 },
+    site: null,
+    earthCalls: [],
     log: [],
     logSeq: 0,
   };
@@ -178,7 +201,9 @@ export function reviveState(raw: unknown): StationState | null {
   if (!data.resources || !(['oxygen', 'water', 'food', 'energy'] as const).every((id) => finite(data.resources?.[id]))) return null;
   if (!data.machines || !data.crop || !data.stats || !Array.isArray(data.unlocked) || !Array.isArray(data.completedTasks)) return null;
   if (!Array.isArray(data.faults) || !Array.isArray(data.log) || !Array.isArray(data.triggered)) return null;
-  return copy(data as StationState);
+  // Games saved before Earth communication existed have no site or calls.
+  const site = data.site === 'moon' || data.site === 'mars' ? data.site : null;
+  return copy({ ...(data as StationState), site, earthCalls: Array.isArray(data.earthCalls) ? data.earthCalls : [] });
 }
 
 export function getStationStats(state: StationState): StationStats {
@@ -353,6 +378,14 @@ function advance(state: StationState, minutes: number, inputs: StepInputs): void
     if (has(state, 'water') || has(state, 'food')) addLog(state, 'A cargo ship has docked with fresh water and food.', 'good');
   }
 
+  // Replies from Mission Control arrive, unless the antenna is down (no signal).
+  for (const call of state.earthCalls) {
+    if (!call.replied && state.minutes >= call.repliesAt && !hasFault(state, 'antenna')) {
+      call.replied = true;
+      addLog(state, 'Mission Control has replied! Read their answer in the Message to Earth box.', 'good');
+    }
+  }
+
   // Random problems.
   if (state.minutes >= state.nextEventAt) {
     state.nextEventAt = state.minutes + SIM.eventMinGapMinutes + roll(state) * (SIM.eventMaxGapMinutes - SIM.eventMinGapMinutes);
@@ -441,6 +474,7 @@ export function applyAction(state: StationState, action: Action): ActionResult {
     case 'repair': {
       if (!hasFault(next, action.fault)) return refuse('Nothing needs fixing here right now.');
       next.faults = next.faults.filter((fault) => fault !== action.fault);
+      next.earthCalls = next.earthCalls.filter((call) => call.fault !== action.fault);
       next.stats.repairs += 1;
       completeTask(next, `repair:${action.fault}`);
       return done(FAULT_INFO[action.fault].fixed, 'good');
@@ -466,6 +500,38 @@ export function applyAction(state: StationState, action: Action): ActionResult {
       next.nextSupplyAt = Math.min(next.nextSupplyAt, next.minutes + 120);
       completeTask(next, 'request-supply');
       return done('Message sent! Earth says a cargo ship will arrive in about two hours.', 'good');
+
+    case 'chooseSite':
+      if (action.site !== 'moon' && action.site !== 'mars') return refuse('Choose the Moon or Mars.');
+      if (next.earthCalls.some((call) => !call.replied)) return refuse('Wait for Mission Control to reply before moving the base.');
+      next.site = action.site;
+      return done(action.site === 'moon' ? 'Your base is on the Moon. Earth is close: messages take about 1.3 seconds each way.' : 'Your base is on Mars. Messages to Earth take minutes, so the crew must often solve problems alone.', 'good');
+
+    case 'askEarth': {
+      if (!next.site) return refuse('Choose where your base is first.');
+      if (!hasFault(next, action.fault)) return refuse('That problem is already fixed.');
+      if (hasFault(next, 'antenna')) return refuse('No signal! The antenna is not pointing at Earth, so nobody can hear you. Use your training.');
+      if (next.earthCalls.some((call) => call.fault === action.fault)) return refuse('You have already asked Mission Control about this.');
+      const [low, high] = SIM.earthDelayRange[next.site];
+      if (!(action.oneWaySeconds >= low && action.oneWaySeconds <= high)) return refuse('That signal delay does not match your site.');
+      next.earthCalls.push({
+        fault: action.fault,
+        site: next.site,
+        oneWaySeconds: action.oneWaySeconds,
+        sentAt: next.minutes,
+        repliesAt: next.minutes + earthWaitMinutes(action.oneWaySeconds),
+        replied: false,
+        resourcesAtSend: { ...next.resources },
+      });
+      return done('Message sent to Mission Control. The reply is on its way back at the speed of light.');
+    }
+
+    case 'trainingMistake': {
+      if (!hasFault(next, action.fault)) return refuse('That problem is already fixed.');
+      const resource = MISTAKE_RESOURCE[action.fault];
+      next.resources[resource] = clamp(next.resources[resource] - SIM.trainingMistakeLoss, 0, 100);
+      return done(`That step did not help, and it wasted ${SIM.trainingMistakeLoss}% of the ${resource}. Think back to your training and try again.`, 'warn');
+    }
   }
 }
 

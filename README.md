@@ -193,6 +193,22 @@ Achievements are worked out from these records each time, not stored separately,
 
 Run its tests with `npx vitest run src/sol`.
 
+## Talking to Earth: the signal delay
+
+At the **Antenna Console** (or the first time a problem needs help) the player chooses where the base is:
+
+- **Moon Base:** 1.3 seconds each way (384,400 km ÷ the speed of light).
+- **Mars Base:** today's real value, between about 3 and 22 minutes each way. It is calculated from where Earth and Mars are in their orbits, using JPL's published formulas for approximate planet positions (`src/game/comms/delay.ts`). Tests check it against NASA's recorded closest approaches (55.76 million km on 27 Aug 2003, and others) and that it stays within 3–22.3 minutes every day from 2000 to 2050.
+
+When a machine breaks, its panel offers two choices:
+
+- **Ask Mission Control.** The panel shows the real one-way delay, the real time until the reply (there and back), and how long the wait takes in the game. The countdown in the HUD shows the **real** delay ticking down, and what the problem has drained so far ("Lost while waiting: water −1.3%"). When the reply arrives, Mission Control's advice is highlighted.
+- **Act now on your training.** A question from the matching Academy module, with no waiting. A wrong step wastes 5% of the store it affects (a game value) and explains why it was wrong.
+
+If the antenna is broken, nobody can hear the crew, so they must use their training (and replies already on their way wait until it is fixed).
+
+**What is real and what is sped up.** The delays shown are always the real numbers. Only the wait is sped up: it runs on the station clock (one real minute of delay passes in one station minute, half a real second), so a 22-minute Mars round trip takes 11 seconds of play, 120× faster than real life. Very short delays, like the Moon's 2.6-second round trip, play in real time so the player still sees them. The station keeps running during the wait, so the problem keeps draining the station.
+
 ## Radiation storms from real solar events
 
 Every third sol (once the Radiation Protection module is passed) a **Radiation Storm** warning appears during the day, based on a **real** solar event from NASA's DONKI database. The banner shows the event's real date and type ("Based on a real solar event from 17 October 2026: a coronal mass ejection…"), whether it came from live or saved NASA data, a link to the event on NASA's site, and the label "Game mechanic, not a radiation forecast". A countdown runs on the station clock (about 2 real minutes, paused with the game). The player chooses:
@@ -287,6 +303,7 @@ If this goes beyond a hackathon demo to real children, get proper advice on chil
 - All eight lessons' content (well-formed, exactly one right answer per question, every slider activity starts unsolved and can be solved).
 - The knowledge search and NOLA's built-in replies, including the personal-information guard.
 - Space data validation, the NOAA scale thresholds, the NASA conversion and the fallback to simulated data.
+- Earth communication: Mars distances against NASA's recorded closest approaches, the Moon delay, how the wait is sped up, replies blocked by a broken antenna, training mistakes, and the training questions.
 - The DONKI events route on real recorded NASA data (which events count, host order with and without a key, caching, the 502 answer), the offline archive, and the radiation storm rules (costs, harm, one storm at a time, old saves).
 - The AI backend's request checks and sign-in check.
 - The station map (every machine reachable, locked doors block).

@@ -14,6 +14,7 @@ import { NolaMascot } from '../features/companion/NolaMascot';
 import { SpeechBubble } from '../features/companion/SpeechBubble';
 import { DEFAULT_AVATAR } from '../features/profile/avatarOptions';
 import { GameBridge, type GameView } from '../game/GameBridge';
+import { EarthLinkPanel } from '../game/comms/EarthComms';
 import { EquipmentPanel } from '../game/hud/EquipmentPanel';
 import { InteractButton, Joystick, MissionPanel, NolaCaption, ResourceStrip } from '../game/hud/Hud';
 import { StationMapModal } from '../game/hud/StationMapModal';
@@ -96,6 +97,7 @@ function StationGame() {
   const solSave = solMission.save;
   const spaceEvents = useSpaceEvents();
   const [stormMessage, setStormMessage] = useState<string | null>(null);
+  const [commsMessage, setCommsMessage] = useState<string | null>(null);
 
   // The game fills the screen, so the star background behind it can rest.
   useEffect(() => pauseSpaceBackdrop(), []);
@@ -130,6 +132,13 @@ function StationGame() {
   }, [bridge, viewKey]);
 
   const closePanel = useCallback(() => setOpenEquipment(null), []);
+
+  // The "message sent" note fades after a few seconds; the reply clock stays in the HUD.
+  useEffect(() => {
+    if (!commsMessage) return;
+    const timer = setTimeout(() => setCommsMessage(null), 8000);
+    return () => clearTimeout(timer);
+  }, [commsMessage]);
 
   // Radiation storms from real NASA solar events: a warning every few sols
   // during the day, once the Radiation Protection module is passed.
@@ -215,6 +224,7 @@ function StationGame() {
                 </p>
               </section>
             )}
+            <EarthLinkPanel state={state} />
             <MissionPanel state={state} />
           </div>
           {/* The storm warning: its own row at the top on smaller screens, in the middle on wide ones. */}
@@ -252,6 +262,11 @@ function StationGame() {
 
         <div className="flex-1" />
 
+        {commsMessage && (
+          <p role="status" className="pointer-events-auto w-fit max-w-md rounded-2xl border-2 border-glow bg-hull/95 px-3 py-2 text-sm font-semibold">
+            {commsMessage}
+          </p>
+        )}
         <p className="pointer-events-auto w-fit rounded-full bg-hull/90 px-3 py-1 text-sm font-bold" aria-live="polite">
           {room ? findRoom(room).name : 'Station'}
           {nearbyName ? ` · Near: ${nearbyName}` : ''}
@@ -282,7 +297,10 @@ function StationGame() {
       {openEquipment === 'console' && solSave ? (
         <SolBriefing save={solSave} unlocked={unlockedSystems} onPlan={solMission.plan} onSkip={solMission.skip} onFinish={solMission.finish} onClose={closePanel} />
       ) : (
-        openEquipment && <EquipmentPanel id={openEquipment} state={state} dispatch={dispatch} weather={weather} onClose={closePanel} urgent={urgentHere} />
+        openEquipment && <EquipmentPanel id={openEquipment} state={state} dispatch={dispatch} weather={weather} onClose={closePanel} urgent={urgentHere} onSent={(text) => {
+          closePanel();
+          setCommsMessage(text);
+        }} />
       )}
 
       <StationMapModal

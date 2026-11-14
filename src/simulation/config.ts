@@ -89,5 +89,16 @@ export const SIM = {
   supplyFood: 25,
   supplyRequestCooldownMinutes: 36 * 60,
 
+  // Talking to Earth. The signal delay itself is REAL (light speed); see
+  // src/game/comms/delay.ts. Only the wait is sped up: it runs on the
+  // station clock, so one real minute of delay passes in one station
+  // minute (half a real second). Very short delays, like the Moon's,
+  // play in real time instead, so the player still sees them.
+  earthWaitMinRealSeconds: 3,
+  /** Accepted one-way delays in seconds: the Moon 1.2–1.4 s (356,000–407,000 km), Mars 3.0–22.3 min (54.6–401 million km). */
+  earthDelayRange: { moon: [1.18, 1.36], mars: [180, 1340] },
+  /** Resource lost when the player picks the wrong step on their own (% of a tank). A game value. */
+  trainingMistakeLoss: 5,
+
   logLength: 12,
 } as const;

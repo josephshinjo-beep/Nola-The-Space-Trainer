@@ -18,6 +18,23 @@ export type MachineId = 'oxygenGenerator' | 'waterRecycler' | 'thermalControl';
 /** Things that can break and need a repair. */
 export type FaultId = 'oxygen-generator' | 'co2-filter' | 'water-leak' | 'panel-drift' | 'thermal-fault' | 'antenna';
 
+/** Where the base is. It sets how long radio messages take to and from Earth. */
+export type SiteId = 'moon' | 'mars';
+
+/** A question sent to Mission Control about a problem, waiting for (or with) a reply. */
+export interface EarthCall {
+  fault: FaultId;
+  site: SiteId;
+  /** Real one-way signal time in seconds, for display. Never scaled. */
+  oneWaySeconds: number;
+  /** Station minute the message was sent, and the minute the reply arrives. */
+  sentAt: number;
+  repliesAt: number;
+  replied: boolean;
+  /** Resources when the message was sent, to show what was lost while waiting. */
+  resourcesAtSend: Record<ResourceId, number>;
+}
+
 export type LogTone = 'info' | 'good' | 'warn' | 'danger';
 
 export interface LogEntry {
@@ -63,6 +80,10 @@ export interface StationState {
   /** Mission faults and storms already started, so each is triggered once. */
   triggered: string[];
   stats: { stormsSheltered: number; harvests: number; repairs: number };
+  /** The base's site, chosen by the player (null until chosen). */
+  site: SiteId | null;
+  /** Questions to Mission Control, at most one per problem. */
+  earthCalls: EarthCall[];
   log: LogEntry[];
   logSeq: number;
 }
@@ -92,7 +113,12 @@ export type Action =
   | { type: 'repair'; fault: FaultId }
   | { type: 'heal' }
   | { type: 'checkMonitor' }
-  | { type: 'requestSupply' };
+  | { type: 'requestSupply' }
+  | { type: 'chooseSite'; site: SiteId }
+  /** Ask Mission Control how to fix a problem. The real delay comes from the game (it depends on the date for Mars). */
+  | { type: 'askEarth'; fault: FaultId; oneWaySeconds: number }
+  /** The player acted on their own training and chose the wrong step. */
+  | { type: 'trainingMistake'; fault: FaultId };
 
 export interface ActionResult {
   state: StationState;
