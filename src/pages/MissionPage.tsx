@@ -3,6 +3,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { Link } from 'react-router';
 import { Button, buttonClasses } from '../components/Button';
 import { ConfirmDialog, Modal } from '../components/ConfirmDialog';
+import { pauseSpaceBackdrop } from '../components/space/SpaceBackdrop';
 import { useSpaceWeather } from '../data/useSpaceWeather';
 import { useAcademyProgress } from '../features/academy/AcademyProgressContext';
 import { CURRICULUM } from '../features/academy/curriculum';
@@ -72,6 +73,9 @@ function StationGame() {
   const weatherInputs = weather.summary?.inputs ?? DEFAULT_INPUTS.spaceWeather;
   const sim = useSimulation(user?.uid, unlockedSystems, () => ({ inShelter: roomRef.current === 'shelter', spaceWeather: weatherInputs }));
   const { state, dispatch, setPaused } = sim;
+
+  // The game fills the screen, so the star background behind it can rest.
+  useEffect(() => pauseSpaceBackdrop(), []);
 
   // What the player does in the game world.
   useEffect(() => {

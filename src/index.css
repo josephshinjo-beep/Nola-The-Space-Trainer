@@ -68,25 +68,17 @@
   }
 }
 
-/* Fixed starry backdrop shared by every page. */
-.starfield {
+/*
+ * The animated space background (src/components/space). Fixed to the
+ * screen, behind everything, and it ignores the mouse and touch.
+ */
+.space-backdrop {
   position: fixed;
   inset: 0;
   z-index: -1;
-  background:
-    radial-gradient(60rem 40rem at 85% -10%, rgb(61 224 245 / 0.14), transparent 60%),
-    radial-gradient(50rem 36rem at -10% 110%, rgb(255 122 26 / 0.13), transparent 60%),
-    radial-gradient(1.5px 1.5px at 12% 22%, #fff, transparent 60%),
-    radial-gradient(1px 1px at 31% 68%, #cfe9ff, transparent 60%),
-    radial-gradient(1.5px 1.5px at 47% 14%, #fff, transparent 60%),
-    radial-gradient(1px 1px at 58% 82%, #fff, transparent 60%),
-    radial-gradient(2px 2px at 71% 37%, #ffe2c7, transparent 60%),
-    radial-gradient(1px 1px at 83% 61%, #fff, transparent 60%),
-    radial-gradient(1.5px 1.5px at 93% 18%, #cfe9ff, transparent 60%),
-    radial-gradient(1px 1px at 22% 90%, #fff, transparent 60%),
-    radial-gradient(1px 1px at 5% 52%, #fff, transparent 60%),
-    radial-gradient(1px 1px at 65% 55%, #cfe9ff, transparent 60%),
-    var(--color-void);
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
 }
 
 /*
@@ -121,7 +113,7 @@ html[data-contrast="high"] {
   --color-alert: #ffb3bf;
   --color-go: #8dffc4;
 }
-html[data-contrast="high"] .starfield { background: #000; }
+html[data-contrast="high"] .space-backdrop { display: none; }
 
 /* Children who are sensitive to motion get a still interface. */
 @media (prefers-reduced-motion: reduce) {

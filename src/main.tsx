@@ -4,6 +4,7 @@ import '@fontsource-variable/nunito';
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import './index.css';
+import { SpaceBackdrop } from './components/space/SpaceBackdrop';
 import { applySettingsToDocument, loadLocalSettings } from './features/accessibility/settings';
 import { missingFirebaseKeys } from './services/firebaseConfig';
 
@@ -33,7 +34,7 @@ async function start() {
   if (missingFirebaseKeys.length > 0) {
     root.render(
       <>
-        <div className="starfield" aria-hidden="true" />
+        <SpaceBackdrop />
         <SetupNeeded missing={missingFirebaseKeys} />
       </>,
     );
@@ -45,7 +46,7 @@ async function start() {
   const { default: App } = await import('./app/App');
   root.render(
     <StrictMode>
-      <div className="starfield" aria-hidden="true" />
+      <SpaceBackdrop />
       <App />
     </StrictMode>,
   );

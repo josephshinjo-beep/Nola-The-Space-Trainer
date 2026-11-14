@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useSettings } from '../features/accessibility/SettingsContext';
+import { pauseSpaceBackdrop } from './space/SpaceBackdrop';
 
 const prefersStill = () => typeof window !== 'undefined' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
 
@@ -23,7 +24,11 @@ export function VideoBackdrop() {
     return () => query.removeEventListener('change', update);
   }, []);
 
-  if (settings.highContrast) return null;
+  // The video covers the animated star canvas, so that canvas can rest meanwhile.
+  const hidden = settings.highContrast;
+  useEffect(() => (hidden ? undefined : pauseSpaceBackdrop()), [hidden]);
+
+  if (hidden) return null;
   const still = settings.reduceMotion || deviceWantsStill;
 
   return (
