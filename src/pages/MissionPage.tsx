@@ -36,12 +36,26 @@ import { DEFAULT_INPUTS, getStationStats, machineStatus } from '../simulation/en
 import { SOL_CONFIG } from '../sol/config';
 import { currentMission } from '../simulation/missions';
 import type { RoomId, StationState } from '../simulation/types';
+import type { Quality } from '../game3d/Station3D';
 
 const SOL_LENGTH = SOL_CONFIG.time.missionLengthSols.value;
 const STORM = SOL_CONFIG.storm;
 
 // Phaser is large, so it is downloaded only when the game is opened.
 const PhaserGame = lazy(() => import('../game/PhaserGame'));
+// The 3D view of the same game (three.js), downloaded only when it is opened.
+const Station3DView = lazy(() => import('../game3d/Station3DView'));
+
+export type ViewMode = '2d' | '3d';
+const QUALITY_KEY = 'nola.mission3d.quality';
+
+function savedQuality(): Quality {
+  try {
+    return localStorage.getItem(QUALITY_KEY) === 'low' ? 'low' : 'high';
+  } catch {
+    return 'high';
+  }
+}
 
 /** Which machine the next mission task happens at. */
 function missionTarget(state: StationState): EquipmentId | null {
@@ -82,7 +96,7 @@ function buildView(state: StationState, avatar: GameView['avatar'], reducedMotio
   };
 }
 
-function StationGame() {
+function StationGame({ mode }: { mode: ViewMode }) {
   const { user, profile } = useAuth();
   const { unlockedSystems, completedModuleIds } = useAcademyProgress();
   const { settings } = useSettings();
@@ -109,6 +123,16 @@ function StationGame() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   const stableStats = useMemo(() => stationStats, [statsKey]);
   const missionRecord = useMissionRecord(user?.uid, solSave, stableStats, completedModuleIds);
+  const [quality, setQuality] = useState<Quality>(savedQuality);
+  const [fps, setFps] = useState<number | null>(null);
+  const changeQuality = (next: Quality) => {
+    setQuality(next);
+    try {
+      localStorage.setItem(QUALITY_KEY, next);
+    } catch {
+      // Private browsing can block storage; the choice still applies now.
+    }
+  };
   const [stormMessage, setStormMessage] = useState<{ text: string; harmed: boolean; turn: number } | null>(null);
   const science = useAstronautScience();
   const [commsMessage, setCommsMessage] = useState<string | null>(null);
@@ -218,7 +242,7 @@ function StationGame() {
           </p>
         }
       >
-        <PhaserGame bridge={bridge} />
+        {mode === '3d' ? <Station3DView bridge={bridge} quality={quality} name={profile?.displayName} onFps={setFps} /> : <PhaserGame bridge={bridge} />}
       </Suspense>
 
       {/* Everything below floats over the game. Only the controls catch clicks. */}
@@ -282,9 +306,20 @@ function StationGame() {
             <button type="button" onClick={() => setMenuOpen(true)} className="pointer-events-auto flex h-12 items-center gap-2 rounded-full border-2 border-line bg-hull/90 px-4 font-bold">
               <Menu aria-hidden="true" size={20} /> Menu
             </button>
-            <Link to="/mission3d" onClick={sim.saveNow} className="pointer-events-auto flex h-12 items-center gap-2 rounded-full border-2 border-glow bg-hull/90 px-4 font-bold">
-              <Box aria-hidden="true" size={20} /> 3D view
+            <Link to={mode === '3d' ? '/mission' : '/mission3d'} onClick={sim.saveNow} className="pointer-events-auto flex h-12 items-center gap-2 rounded-full border-2 border-glow bg-hull/90 px-4 font-bold">
+              <Box aria-hidden="true" size={20} /> {mode === '3d' ? '2D view' : '3D view'}
             </Link>
+            {mode === '3d' && (
+              <div className="pointer-events-auto flex flex-col items-stretch gap-1 rounded-2xl border-2 border-line bg-hull/90 p-1 text-sm font-bold">
+                <span className="sr-only">Graphics quality</span>
+                {(['low', 'high'] as const).map((option) => (
+                  <button key={option} type="button" aria-pressed={quality === option} onClick={() => changeQuality(option)} className={`min-h-9 rounded-xl px-3 ${quality === option ? 'bg-glow text-void' : 'text-mist'}`}>
+                    {option === 'low' ? 'Low' : 'High'}
+                  </button>
+                ))}
+                <span className="px-1 text-center text-xs text-mist">{fps === null ? '…' : `${fps} FPS`}</span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -311,7 +346,7 @@ function StationGame() {
             <Joystick bridge={bridge} />
           </div>
           <div className="hidden text-sm font-bold text-mist [@media(pointer:fine)]:block">
-            <p className="pointer-events-auto rounded-xl bg-hull/90 px-3 py-2">Move: WASD or arrow keys · Use: E</p>
+            <p className="pointer-events-auto rounded-xl bg-hull/90 px-3 py-2">Move: WASD or arrow keys · Use: E{mode === '3d' ? ' · Turn camera: Q / R' : ''}</p>
           </div>
           <div className="hidden min-w-0 flex-1 justify-center sm:flex">
             <NolaCaption state={state} />
@@ -353,8 +388,8 @@ function StationGame() {
           <Link to="/profile" className={buttonClasses('secondary')}>
             Accessibility settings
           </Link>
-          <Link to="/mission3d" className={buttonClasses('secondary')} onClick={sim.saveNow}>
-            Try the 3D view (preview)
+          <Link to={mode === '3d' ? '/mission' : '/mission3d'} className={buttonClasses('secondary')} onClick={sim.saveNow}>
+            {mode === '3d' ? 'Switch to the 2D view' : 'Switch to the 3D view'}
           </Link>
           <Button
             variant="secondary"
@@ -401,6 +436,11 @@ function StationGame() {
 
 /** The Mission page: the station game, or a friendly locked screen before Module 1 is passed. */
 export default function MissionPage() {
+  return <MissionGame mode="2d" />;
+}
+
+/** The station game in 2D (Phaser) or 3D (three.js). Missions, tasks, sols and saves are the same in both. */
+export function MissionGame({ mode }: { mode: ViewMode }) {
   const { loaded, unlockedSystems } = useAcademyProgress();
   const first = CURRICULUM[0];
 
@@ -432,5 +472,5 @@ export default function MissionPage() {
     );
   }
 
-  return <StationGame />;
+  return <StationGame mode={mode} />;
 }

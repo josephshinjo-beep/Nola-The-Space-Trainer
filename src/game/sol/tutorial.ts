@@ -23,11 +23,11 @@ export function tutorialStep(save: SolSave | null, consoleOpen: boolean): Tutori
   if (phase === 'decision') {
     return consoleOpen
       ? { id: 'choose-plan', number: 2, text: 'Pick one plan for today. Every plan gives you something and costs you something. Press a question mark to learn about any resource.' }
-      : { id: 'walk-to-console', number: 1, text: 'Welcome to your first sol! A sol is one day on Mars. Each sol, you plan a job, do it, then end the day. Walk to the Command Console. It has an orange ring.' };
+      : { id: 'walk-to-console', number: 1, text: 'Welcome to your first sol! A sol is one day on Mars. Each sol, you plan a job, do it, then end the day. Walk to the Command Console. It has an orange marker.' };
   }
   const job = urgentJob(save);
   if (job && !job.done) {
-    return { id: 'do-the-job', number: 3, text: `Now do the urgent job at the ${findEquipment(job.card.urgent.equipment).name}. Look for the orange ring and the star, or use the Map to travel there.` };
+    return { id: 'do-the-job', number: 3, text: `Now do the urgent job at the ${findEquipment(job.card.urgent.equipment).name}. Look for the orange marker, or use the Map to travel there.` };
   }
   return { id: 'end-the-sol', number: 4, text: 'Well done! Go back to the Command Console and end the sol. Then you will see what happened in the night.' };
 }

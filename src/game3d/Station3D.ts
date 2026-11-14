@@ -1,13 +1,18 @@
 import * as THREE from 'three';
 import type { RoomId } from '../simulation/types';
-import { buildWalkGrid, COLS, EQUIPMENT, PLAYER_START, ROOMS, roomAtTile, ROWS, TILE } from '../game/stationMap';
+import type { GameBridge } from '../game/GameBridge';
+import { buildWalkGrid, COLS, EQUIPMENT, PLAYER_START, ROOMS, roomAtTile, ROWS, standingSpot, TILE, type EquipmentId } from '../game/stationMap';
 import { angleDelta, CAMERA_FOV, cameraOffset, damp, FOLLOW_LAG, LOOK_LEAD, screenToWorld, snapYaw, type YawSnap } from './camera';
 import { cameraSide, edgeLips, FADED_OPACITY, wallHeight, wallTiles } from './level';
 
 /**
  * The 3D station view: a fixed high-angle diagonal camera following a blocky
  * astronaut around the same station layout as the 2D game (stationMap.ts).
- * It reads the layout only; it never changes the simulation or the sol engine.
+ * It talks to the rest of the game only through GameBridge, exactly like the
+ * Phaser scene: React tells it what to show (locked doors, faults, the next
+ * task, the urgent job) and it reports what the player does (room entered,
+ * machine nearby, "use" pressed). It never changes the simulation or the
+ * sol engine itself, so every mission, task and sol works the same in 2D and 3D.
  *
  * All art is original: plain coloured boxes, no textures.
  */
@@ -21,6 +26,9 @@ const FLOOR_SHADES = [0x3a4766, 0x34405e, 0x404d6e];
 const WALL_SHADES = [0x252f4d, 0x2a3556, 0x222b47];
 const WALL_LAG = 0.12; // seconds, for walls rising and lowering when the camera turns
 const FADE_LAG = 0.1; // seconds, for blocks fading out of the way
+/** How close the astronaut must be to use a machine: the same reach as the 2D game (1.45 tiles). */
+export const REACH = 1.45;
+const DOORS = ROOMS.flatMap((room) => room.door.map((door) => ({ ...door, room: room.id })));
 
 /**
  * A Lambert material whose opacity can be set per instance, through an
@@ -77,8 +85,11 @@ class FadeGroup {
 }
 
 export interface StationOptions {
-  lockedRooms: RoomId[];
+  /** The same bridge the 2D game uses: the only link to the rest of the game. */
+  bridge: GameBridge;
   quality: Quality;
+  /** The astronaut's name, shown on a tag over their head. */
+  name?: string;
   /** Called about once a second with the measured frame rate. */
   onFps?: (fps: number) => void;
 }
@@ -111,21 +122,34 @@ export class Station3D {
   private fadeGroups: FadeGroup[] = [];
   private raycaster = new THREE.Raycaster();
   private rayTarget = new THREE.Vector3();
+  private seenVersion = -1;
+  private lockedKey = '';
+  private doors!: THREE.InstancedMesh;
+  private screens!: THREE.InstancedMesh;
+  private hemisphere!: THREE.HemisphereLight;
+  private markers!: { objective: THREE.Mesh; urgent: THREE.Mesh; alerts: THREE.InstancedMesh; plates: THREE.InstancedMesh; focus: THREE.Mesh; outline: THREE.Group };
+  private labels!: { name: HTMLDivElement; prompt: HTMLDivElement };
+  private currentRoom: RoomId | null = null;
+  private nearby: EquipmentId | null = null;
+  private time = 0;
+  private labelPoint = new THREE.Vector3();
 
   constructor(
     private container: HTMLElement,
     private options: StationOptions,
   ) {
     this.renderer = this.makeRenderer(options.quality);
-    this.grid = buildWalkGrid(new Set(options.lockedRooms));
+    this.grid = buildWalkGrid(new Set(options.bridge.view.lockedRooms));
     this.scene.background = new THREE.Color(0x070b1f);
     this.buildLights();
     this.buildFloor();
     this.buildEdges();
     this.buildWalls();
     this.buildMachines();
-    this.buildLockedDoors();
+    this.buildDoors();
     this.buildAstronaut();
+    this.buildMarkers();
+    this.buildLabels();
 
     const start = { x: PLAYER_START.x / TILE, z: PLAYER_START.y / TILE };
     this.player.position.set(start.x, 0, start.z);
@@ -150,7 +174,7 @@ export class Station3D {
     let faded = 0;
     for (const group of this.fadeGroups) for (const value of group.opacity) if (value < 0.9) faded += 1;
     const size = this.renderer.getDrawingBufferSize(new THREE.Vector2());
-    return { x, z, yaw: this.yaw, heading: this.heading, camera: { x: this.camera.position.x, y: this.camera.position.y, z: this.camera.position.z }, calls, triangles, pixels: `${size.x}x${size.y}`, faded, wallsMoving: this.walls.moving, lowWalls: this.walls.tiles.filter((t) => t.height < 1.5).length, tallWalls: this.walls.tiles.filter((t) => t.height >= 1.5).length };
+    return { x, z, yaw: this.yaw, heading: this.heading, camera: { x: this.camera.position.x, y: this.camera.position.y, z: this.camera.position.z }, calls, triangles, pixels: `${size.x}x${size.y}`, faded, nearby: this.nearby, room: this.currentRoom, wallsMoving: this.walls.moving, lowWalls: this.walls.tiles.filter((t) => t.height < 1.5).length, tallWalls: this.walls.tiles.filter((t) => t.height >= 1.5).length };
   }
 
   // ------------------------------------------------------------ set-up
@@ -160,7 +184,7 @@ export class Station3D {
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, quality === 'high' ? 1.5 : 1));
     renderer.domElement.classList.add('station3d-canvas');
     renderer.domElement.setAttribute('role', 'img');
-    renderer.domElement.setAttribute('aria-label', '3D view of your space station from above. Move with W, A, S and D or the arrow keys.');
+    renderer.domElement.setAttribute('aria-label', '3D view of your space station from above. Your location, nearby equipment and mission tasks are described in the panels around it.');
     this.container.appendChild(renderer.domElement);
     return renderer;
   }
@@ -184,7 +208,8 @@ export class Station3D {
 
   private buildLights(): void {
     // Step 1 uses simple lights so the shapes read clearly; step 3 replaces them.
-    this.scene.add(new THREE.HemisphereLight(0x9fb4ff, 0x1a2040, 1.6));
+    this.hemisphere = new THREE.HemisphereLight(0x9fb4ff, 0x1a2040, 1.6);
+    this.scene.add(this.hemisphere);
     const sun = new THREE.DirectionalLight(0xffe2b8, 1.4);
     sun.position.set(5, 10, 2);
     this.scene.add(sun);
@@ -291,27 +316,116 @@ export class Station3D {
   /** The station's machines as simple blocks with a glowing screen on top. */
   private buildMachines(): void {
     const body = new THREE.InstancedMesh(this.track(new THREE.BoxGeometry(0.8, 0.9, 0.8).translate(0, 0.45, 0)), this.track(fadeableMaterial(0x5b6a8f)), EQUIPMENT.length);
-    const screen = new THREE.InstancedMesh(this.track(new THREE.BoxGeometry(0.62, 0.06, 0.62)), this.track(fadeableMaterial(0x1d6f7a, 0x2bb8c9)), EQUIPMENT.length);
+    const screen = new THREE.InstancedMesh(this.track(new THREE.BoxGeometry(0.62, 0.06, 0.62)), this.track(fadeableMaterial(0xffffff, 0x0b3a40)), EQUIPMENT.length);
+    this.screens = screen;
     const matrix = new THREE.Matrix4();
     EQUIPMENT.forEach((item, index) => {
       body.setMatrixAt(index, matrix.makeTranslation(item.x + 0.5, 0, item.y + 0.5));
       screen.setMatrixAt(index, matrix.makeTranslation(item.x + 0.5, 0.93, item.y + 0.5));
     });
     body.computeBoundingSphere();
+    this.paintScreens([]);
     this.scene.add(body, screen);
     this.fadeGroups.push(new FadeGroup([body, screen]));
   }
 
-  /** Doors of rooms that are still locked, shown as barriers (they also block walking). */
-  private buildLockedDoors(): void {
-    const locked = ROOMS.filter((room) => this.options.lockedRooms.includes(room.id)).flatMap((room) => room.door);
-    if (locked.length === 0) return;
-    const mesh = new THREE.InstancedMesh(this.track(new THREE.BoxGeometry(1, 1.1, 0.3).translate(0, 0.55, 0)), this.track(fadeableMaterial(0xc4552a, 0x3a1206)), locked.length);
+  /** A barrier on every door; only the doors of locked rooms are shown (and block walking). */
+  private buildDoors(): void {
+    this.doors = new THREE.InstancedMesh(this.track(new THREE.BoxGeometry(1, 1.1, 0.3).translate(0, 0.55, 0)), this.track(fadeableMaterial(0xc4552a, 0x3a1206)), DOORS.length);
+    this.scene.add(this.doors);
+    this.fadeGroups.push(new FadeGroup([this.doors]));
+    this.applyLocks(this.options.bridge.view.lockedRooms);
+  }
+
+  private applyLocks(lockedRooms: readonly RoomId[]): void {
+    const key = [...lockedRooms].sort().join(',');
+    if (key === this.lockedKey) return;
+    this.lockedKey = key;
+    this.grid = buildWalkGrid(new Set(lockedRooms));
     const matrix = new THREE.Matrix4();
-    locked.forEach((door, index) => mesh.setMatrixAt(index, matrix.makeTranslation(door.x + 0.5, 0, door.y + 0.5)));
-    mesh.computeBoundingSphere();
-    this.scene.add(mesh);
-    this.fadeGroups.push(new FadeGroup([mesh]));
+    DOORS.forEach((door, index) => {
+      const size = lockedRooms.includes(door.room) ? 1 : 0;
+      this.doors.setMatrixAt(index, matrix.makeScale(size, size, size).setPosition(door.x + 0.5, 0, door.y + 0.5));
+    });
+    this.doors.instanceMatrix.needsUpdate = true;
+    this.doors.computeBoundingSphere();
+  }
+
+  /** Machines that are switched on and working have bright screens. */
+  private paintScreens(running: readonly EquipmentId[]): void {
+    const color = new THREE.Color();
+    EQUIPMENT.forEach((item, index) => this.screens.setColorAt(index, color.setHex(running.includes(item.id) ? 0x5ff0ff : 0x2a5a66)));
+    if (this.screens.instanceColor) this.screens.instanceColor.needsUpdate = true;
+  }
+
+  /**
+   * Gameplay markers: a yellow diamond over the next mission task, an orange
+   * one over today's urgent job, red warnings over broken machines, a cyan
+   * plate where you stand to use each machine, and a yellow outline under
+   * the astronaut's feet.
+   */
+  private buildMarkers(): void {
+    const shape = new THREE.Shape([new THREE.Vector2(0, 0.28), new THREE.Vector2(0.2, 0), new THREE.Vector2(0, -0.28), new THREE.Vector2(-0.2, 0)]);
+    const diamond = this.track(new THREE.ShapeGeometry(shape));
+    const objective = new THREE.Mesh(diamond, this.track(new THREE.MeshBasicMaterial({ color: 0xffd23f, side: THREE.DoubleSide })));
+    const urgent = new THREE.Mesh(diamond, this.track(new THREE.MeshBasicMaterial({ color: 0xff7a1a, side: THREE.DoubleSide })));
+    objective.visible = false;
+    urgent.visible = false;
+
+    const alerts = new THREE.InstancedMesh(this.track(new THREE.OctahedronGeometry(0.16)), this.track(new THREE.MeshBasicMaterial({ color: 0xff4d5e })), EQUIPMENT.length);
+    const plates = new THREE.InstancedMesh(this.track(new THREE.BoxGeometry(0.7, 0.03, 0.7)), this.track(new THREE.MeshBasicMaterial({ color: 0x3de0f5, transparent: true, opacity: 0.35 })), EQUIPMENT.length);
+    const matrix = new THREE.Matrix4();
+    EQUIPMENT.forEach((item, index) => {
+      const spot = standingSpot(item);
+      plates.setMatrixAt(index, matrix.makeTranslation(spot.x / TILE, 0.02, spot.y / TILE));
+      alerts.setMatrixAt(index, matrix.makeScale(0, 0, 0));
+    });
+    const focus = new THREE.Mesh(this.track(new THREE.BoxGeometry(0.78, 0.04, 0.78)), this.track(new THREE.MeshBasicMaterial({ color: 0x8ff6ff, transparent: true, opacity: 0.7 })));
+    focus.visible = false;
+
+    const outline = new THREE.Group();
+    const bar = this.track(new THREE.BoxGeometry(0.96, 0.03, 0.06));
+    const yellow = this.track(new THREE.MeshBasicMaterial({ color: 0xffd23f }));
+    for (const [x, z, turn] of [[0, -0.45, 0], [0, 0.45, 0], [-0.45, 0, 1], [0.45, 0, 1]] as const) {
+      const piece = new THREE.Mesh(bar, yellow);
+      piece.position.set(x, 0.03, z);
+      if (turn) piece.rotation.y = Math.PI / 2;
+      outline.add(piece);
+    }
+    this.scene.add(objective, urgent, alerts, plates, focus, outline);
+    this.markers = { objective, urgent, alerts, plates, focus, outline };
+  }
+
+  /** Labels drawn as ordinary page content over the 3D view: the name tag and the "Press E" prompt. */
+  private buildLabels(): void {
+    const make = (className: string) => {
+      const element = document.createElement('div');
+      element.className = `pointer-events-none absolute left-0 top-0 whitespace-nowrap rounded-full font-bold ${className}`;
+      element.setAttribute('aria-hidden', 'true');
+      this.container.appendChild(element);
+      return element;
+    };
+    const name = make('border border-line bg-hull/85 px-2 py-0.5 text-xs text-star');
+    name.textContent = this.options.name ?? 'Astronaut';
+    const prompt = make('bg-glow px-3 py-1 text-sm text-void shadow-lg');
+    prompt.style.display = 'none';
+    this.labels = { name, prompt };
+  }
+
+  /** Applies what React wants shown, whenever it changes. */
+  private applyView(): void {
+    const { view } = this.options.bridge;
+    this.seenVersion = this.options.bridge.viewVersion;
+    this.applyLocks(view.lockedRooms);
+    this.paintScreens(view.running);
+    const matrix = new THREE.Matrix4();
+    EQUIPMENT.forEach((item, index) => {
+      const on = view.alerts.includes(item.id);
+      this.markers.alerts.setMatrixAt(index, on ? matrix.makeTranslation(item.x + 0.5, 1.35, item.y + 0.5) : matrix.makeScale(0, 0, 0));
+    });
+    this.markers.alerts.instanceMatrix.needsUpdate = true;
+    // A solar storm tints the station red.
+    this.hemisphere.color.setHex(view.storm ? 0xff9a9a : 0x9fb4ff);
   }
 
   /**
@@ -374,17 +488,23 @@ export class Station3D {
     const target = event.target as HTMLElement | null;
     if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)) return;
     const key = event.key.toLowerCase();
+    if (this.options.bridge.paused) return;
     if (['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'].includes(key)) {
       this.keys.add(key);
       event.preventDefault();
     }
-    if ((key === 'q' || key === 'e') && !event.repeat) this.rotate(key === 'q' ? -1 : 1);
+    // Q and R turn the camera; E, Space and Enter use the machine in reach, as in the 2D game.
+    if ((key === 'q' || key === 'r') && !event.repeat) this.rotate(key === 'q' ? -1 : 1);
+    if ((key === 'e' || key === ' ' || key === 'enter') && !event.repeat && this.nearby) {
+      event.preventDefault();
+      this.options.bridge.emit('interact', this.nearby);
+    }
   };
 
   private onKeyUp = (event: KeyboardEvent) => this.keys.delete(event.key.toLowerCase());
   private onBlur = () => this.keys.clear();
 
-  /** Q/E: snap the camera 90 degrees around the astronaut, with a short ease. */
+  /** Q/R: snap the camera 90 degrees around the astronaut, with a short ease. */
   rotate(direction: -1 | 1): void {
     const from = this.yaw;
     const base = this.snap ? this.snap.to : this.yaw;
@@ -393,9 +513,11 @@ export class Station3D {
 
   private input(): { x: number; y: number } {
     const k = this.keys;
+    // The on-screen joystick (phones and tablets) uses screen directions too: pushing up moves up the screen.
+    const stick = this.options.bridge.input;
     return {
-      x: (k.has('d') || k.has('arrowright') ? 1 : 0) - (k.has('a') || k.has('arrowleft') ? 1 : 0),
-      y: (k.has('w') || k.has('arrowup') ? 1 : 0) - (k.has('s') || k.has('arrowdown') ? 1 : 0),
+      x: (k.has('d') || k.has('arrowright') ? 1 : 0) - (k.has('a') || k.has('arrowleft') ? 1 : 0) + stick.x,
+      y: (k.has('w') || k.has('arrowup') ? 1 : 0) - (k.has('s') || k.has('arrowdown') ? 1 : 0) - stick.y,
     };
   }
 
@@ -403,6 +525,11 @@ export class Station3D {
 
   private frame = () => {
     const dt = Math.min(this.clock.getDelta(), 0.05);
+    // While a panel or menu covers the game, nothing moves and nothing is redrawn.
+    if (this.options.bridge.paused) {
+      this.keys.clear();
+      return;
+    }
     this.update(dt);
     this.renderer.render(this.scene, this.camera);
     this.frames += 1;
@@ -422,6 +549,21 @@ export class Station3D {
   }
 
   private update(dt: number): void {
+    const bridge = this.options.bridge;
+    this.time += dt;
+    if (bridge.viewVersion !== this.seenVersion) this.applyView();
+
+    // "Travel to" from the station map: stand next to the machine.
+    if (bridge.travelTo) {
+      const item = EQUIPMENT.find((candidate) => candidate.id === bridge.travelTo);
+      bridge.travelTo = null;
+      if (item && !bridge.view.lockedRooms.includes(item.room)) {
+        const spot = standingSpot(item);
+        this.player.position.set(spot.x / TILE, 0, spot.y / TILE);
+        this.look.set(spot.x / TILE, 0.5, spot.y / TILE);
+      }
+    }
+
     if (this.snap) {
       this.snap.elapsed += dt;
       const { yaw, done } = snapYaw(this.snap);
@@ -455,6 +597,79 @@ export class Station3D {
     this.placeCamera();
     this.updateWalls(dt);
     this.updateOcclusion(dt);
+    this.report();
+    this.updateMarkers();
+  }
+
+  /** Tells React which room the astronaut is in and which machine is in reach, as the 2D game does. */
+  private report(): void {
+    const bridge = this.options.bridge;
+    const p = this.player.position;
+    const here = roomAtTile(Math.floor(p.x), Math.floor(p.z));
+    if (here && here.id !== this.currentRoom) {
+      this.currentRoom = here.id;
+      bridge.emit('room', here.id);
+    }
+    let nearest: EquipmentId | null = null;
+    let best = REACH;
+    for (const item of EQUIPMENT) {
+      const distance = Math.hypot(item.x + 0.5 - p.x, item.y + 0.5 - p.z);
+      if (distance < best) {
+        best = distance;
+        nearest = item.id;
+      }
+    }
+    if (nearest !== this.nearby) {
+      this.nearby = nearest;
+      bridge.emit('nearby', nearest);
+    }
+  }
+
+  private updateMarkers(): void {
+    const { view } = this.options.bridge;
+    const still = view.reducedMotion;
+    const bob = still ? 0 : Math.sin(this.time * 3) * 0.12;
+    const place = (marker: THREE.Mesh, id: EquipmentId | null) => {
+      const item = id ? EQUIPMENT.find((candidate) => candidate.id === id) : undefined;
+      marker.visible = item !== undefined && !view.lockedRooms.includes(item.room);
+      if (!item) return;
+      marker.position.set(item.x + 0.5, 2.15 + bob, item.y + 0.5);
+      // Billboarded: it always faces the camera.
+      marker.quaternion.copy(this.camera.quaternion);
+    };
+    place(this.markers.objective, view.target);
+    // Today's urgent sol job gets its own orange diamond, unless it is the same machine.
+    place(this.markers.urgent, view.urgent && view.urgent !== view.target ? view.urgent : null);
+
+    // The outline sits on the tile under the astronaut's feet.
+    const p = this.player.position;
+    this.markers.outline.position.set(Math.floor(p.x) + 0.5, 0, Math.floor(p.z) + 0.5);
+
+    // The plate of the machine in reach glows and pulses, with a "Press E" label.
+    const focus = this.markers.focus;
+    const item = this.nearby ? EQUIPMENT.find((candidate) => candidate.id === this.nearby) : undefined;
+    focus.visible = item !== undefined;
+    if (item) {
+      const spot = standingSpot(item);
+      focus.position.set(spot.x / TILE, 0.03, spot.y / TILE);
+      const wave = still ? 0 : Math.sin(this.time * 6);
+      focus.scale.set(1 + wave * 0.06, 1, 1 + wave * 0.06);
+      (focus.material as THREE.MeshBasicMaterial).opacity = 0.6 + wave * 0.2;
+      this.labels.prompt.textContent = `Press E: ${item.name}`;
+      this.placeLabel(this.labels.prompt, item.x + 0.5, 0.35, item.y + 0.5);
+    } else this.labels.prompt.style.display = 'none';
+    this.placeLabel(this.labels.name, p.x, 1.35, p.z);
+  }
+
+  /** Puts a page label over a point in the 3D world. */
+  private placeLabel(element: HTMLDivElement, x: number, y: number, z: number): void {
+    const point = this.labelPoint.set(x, y, z).project(this.camera);
+    const visible = point.z < 1;
+    element.style.display = visible ? 'block' : 'none';
+    if (!visible) return;
+    const left = ((point.x + 1) / 2) * this.container.clientWidth;
+    const top = ((1 - point.y) / 2) * this.container.clientHeight;
+    element.style.transform = `translate(${left.toFixed(1)}px, ${top.toFixed(1)}px) translate(-50%, -100%)`;
   }
 
   private placeCamera(): void {
@@ -486,5 +701,7 @@ export class Station3D {
     this.disposables.forEach((item) => item.dispose());
     this.renderer.dispose();
     this.renderer.domElement.remove();
+    this.labels.name.remove();
+    this.labels.prompt.remove();
   }
 }
