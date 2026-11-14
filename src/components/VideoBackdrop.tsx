@@ -39,7 +39,7 @@ export function VideoBackdrop() {
         <video className="h-full w-full object-cover" src="/media/lobby-bg.mp4" poster="/media/lobby-bg.jpg" autoPlay loop muted playsInline preload="auto" disablePictureInPicture />
       )}
       {/* A dark veil keeps white text readable over the bright parts of the galaxy. */}
-      <div className="absolute inset-0 bg-void/55" />
+      <div className="absolute inset-0 bg-void/35" />
     </div>
   );
 }
