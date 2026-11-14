@@ -24,7 +24,7 @@ let aiAvailable: boolean | null = null;
 /** Whether NOLA's last answer came from the AI, and if not, why. Shown under the chat. */
 export type AiStatus =
   | { state: 'unknown' }
-  | { state: 'connected' }
+  | { state: 'connected'; model?: string }
   | { state: 'off'; reason: string };
 
 let aiStatus: AiStatus = { state: 'unknown' };
@@ -104,6 +104,53 @@ export async function askNola({ message, history, hits, context, getToken }: Ask
     console.warn('AI chat unavailable, using built-in answers.', error);
     aiStatus = { state: 'off', reason: 'the AI server could not be reached' };
     return fallback;
+  }
+}
+
+interface SetupReport {
+  ready?: boolean;
+  geminiKey?: string;
+  keyAccepted?: boolean;
+  firebaseProjectId?: string;
+  modelThatWillBeUsed?: string;
+  problem?: string;
+}
+
+/**
+ * Asks the server whether the AI key is set up and working, so the chat
+ * page can say so before the student types anything. It calls the
+ * server's free set-up check, never the AI model itself.
+ */
+export async function checkAiSetup(): Promise<AiStatus> {
+  try {
+    const response = await fetch('/api/chat', { headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(15_000) });
+    const isJson = response.headers.get('content-type')?.includes('application/json') ?? false;
+    if (!isJson || !response.ok) {
+      aiAvailable = false;
+      aiStatus = { state: 'off', reason: 'there is no AI server at this address' };
+      return aiStatus;
+    }
+    const report = (await response.json()) as SetupReport;
+    if (report.ready) {
+      aiStatus = { state: 'connected', model: report.modelThatWillBeUsed };
+      return aiStatus;
+    }
+    const reason =
+      report.geminiKey !== 'set'
+        ? 'no GEMINI_API_KEY was found on the server. Add it in Vercel, then redeploy'
+        : report.keyAccepted === false
+          ? 'Google rejected the key. Check it was copied in full, with no spaces or quote marks, then redeploy'
+          : report.keyAccepted === true && report.firebaseProjectId?.startsWith('MISSING')
+            ? 'the key is fine, but the server has no Firebase project id'
+            : report.keyAccepted === true
+              ? 'the key is accepted, but none of the Gemini models are available to it'
+              : (report.problem ?? 'the set-up check could not be completed');
+    aiAvailable = false;
+    aiStatus = { state: 'off', reason };
+    return aiStatus;
+  } catch {
+    aiStatus = { state: 'off', reason: 'the AI server could not be reached' };
+    return aiStatus;
   }
 }
 

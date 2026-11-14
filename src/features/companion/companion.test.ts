@@ -8,7 +8,7 @@ import { flareClassToFlux, normalizeFlareClass, strongerFlare, validateEnvironme
 import { EQUIPMENT, ROOMS, buildWalkGrid, standingSpot, TILE } from '../../game/stationMap';
 import { createInitialState } from '../../simulation/engine';
 import { MISSIONS } from '../../simulation/missions';
-import { askNola, resetAiAvailability } from './chatService';
+import { askNola, checkAiSetup, resetAiAvailability } from './chatService';
 import { loadKnowledge, searchKnowledge, tokenize } from './knowledge';
 import { buildContext, builtInReply, describeContext, OFF_TOPIC_REPLY, type CompanionContext } from './responder';
 
@@ -120,6 +120,22 @@ describe('chat service fallback', () => {
     expect((await ask('tell me about rockets')).origin).toBe('built-in');
     vi.stubGlobal('fetch', vi.fn(async () => Promise.reject(new Error('offline'))));
     expect((await ask('tell me about rockets')).origin).toBe('built-in');
+  });
+
+  it('reports whether the AI key works, with a plain reason when it does not', async () => {
+    const report = (body: unknown) => vi.stubGlobal('fetch', vi.fn(async () => Response.json(body)));
+    report({ ready: true, geminiKey: 'set', keyAccepted: true, modelThatWillBeUsed: 'gemini-2.5-flash' });
+    expect(await checkAiSetup()).toEqual({ state: 'connected', model: 'gemini-2.5-flash' });
+    report({ ready: false, geminiKey: 'MISSING: add GEMINI_API_KEY' });
+    expect(await checkAiSetup()).toMatchObject({ state: 'off', reason: expect.stringMatching(/no GEMINI_API_KEY/) });
+    report({ ready: false, geminiKey: 'set', keyAccepted: false });
+    expect(await checkAiSetup()).toMatchObject({ state: 'off', reason: expect.stringMatching(/Google rejected the key/) });
+    report({ ready: false, geminiKey: 'set', keyAccepted: true, firebaseProjectId: 'nola', modelThatWillBeUsed: 'NONE' });
+    expect(await checkAiSetup()).toMatchObject({ state: 'off', reason: expect.stringMatching(/none of the Gemini models/) });
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('<!doctype html>', { headers: { 'content-type': 'text/html' } })));
+    expect(await checkAiSetup()).toMatchObject({ state: 'off', reason: expect.stringMatching(/no AI server/) });
+    vi.stubGlobal('fetch', vi.fn(async () => Promise.reject(new Error('offline'))));
+    expect(await checkAiSetup()).toMatchObject({ state: 'off', reason: expect.stringMatching(/could not be reached/) });
   });
 
   it('never sends personal details or game-state questions to the AI', async () => {

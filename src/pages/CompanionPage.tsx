@@ -1,11 +1,11 @@
-import { BookOpen, Send, ShieldCheck } from 'lucide-react';
+import { BookOpen, CircleCheck, Send, ShieldCheck, TriangleAlert } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link } from 'react-router';
 import { Button } from '../components/Button';
 import { ReadAloudButton } from '../features/accessibility/ReadAloudButton';
 import { useAcademyProgress } from '../features/academy/AcademyProgressContext';
 import { useAuth } from '../features/auth/AuthContext';
-import { askNola, getAiStatus, type AiStatus, type ChatTurn } from '../features/companion/chatService';
+import { askNola, checkAiSetup, getAiStatus, type AiStatus, type ChatTurn } from '../features/companion/chatService';
 import { loadKnowledge, searchKnowledge, type Passage } from '../features/companion/knowledge';
 import { NolaMascot, type NolaMood } from '../features/companion/NolaMascot';
 import { buildContext, SUGGESTED_QUESTIONS, type Reply } from '../features/companion/responder';
@@ -50,6 +50,8 @@ export function CompanionPage() {
         return null;
       });
     }
+    // Check the AI key straight away, so a broken key is visible before anyone asks a question.
+    void checkAiSetup().then((status) => !cancelled && setAiStatus(status));
     return () => {
       cancelled = true;
     };
@@ -96,6 +98,21 @@ export function CompanionPage() {
           <p className="text-lg text-mist">Your robot companion for lessons, missions and space questions.</p>
         </div>
       </header>
+
+      {aiStatus.state === 'connected' && (
+        <p role="status" data-testid="ai-status" className="flex items-start gap-2 rounded-2xl border-2 border-go bg-go/10 px-4 py-3 font-semibold text-go">
+          <CircleCheck aria-hidden="true" size={22} className="mt-0.5 shrink-0" />
+          <span>AI key is working. NOLA is answering with Gemini{aiStatus.model ? ` (${aiStatus.model})` : ''}.</span>
+        </p>
+      )}
+      {aiStatus.state === 'off' && (
+        <p role="alert" data-testid="ai-status" className="flex items-start gap-2 rounded-2xl border-2 border-alert bg-alert/10 px-4 py-3 font-semibold text-alert">
+          <TriangleAlert aria-hidden="true" size={22} className="mt-0.5 shrink-0" />
+          <span>
+            AI key is not working: {aiStatus.reason}. Until it is fixed, NOLA uses built-in answers.
+          </span>
+        </p>
+      )}
 
       <section aria-label="Conversation with NOLA" className="rounded-3xl border-2 border-line bg-hull/80 p-4 sm:p-6">
         <ol className="space-y-4" aria-live="polite">
@@ -170,12 +187,6 @@ export function CompanionPage() {
           <Send aria-hidden="true" size={20} /> Send
         </Button>
       </form>
-
-      {aiStatus.state !== 'unknown' && (
-        <p className="text-sm text-mist" data-testid="ai-status">
-          {aiStatus.state === 'connected' ? "NOLA's AI is connected." : `NOLA's AI is not connected (${aiStatus.reason}), so NOLA is using built-in answers.`}
-        </p>
-      )}
 
       <p className="flex items-start gap-2 text-base text-mist">
         <ShieldCheck aria-hidden="true" size={20} className="mt-0.5 shrink-0 text-glow" />
