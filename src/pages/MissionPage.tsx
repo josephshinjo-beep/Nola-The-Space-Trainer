@@ -1,4 +1,4 @@
-import { Box, Map as MapIcon, Menu } from 'lucide-react';
+import { Box } from 'lucide-react';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { Button, buttonClasses } from '../components/Button';
@@ -19,7 +19,8 @@ import { DEFAULT_AVATAR } from '../features/profile/avatarOptions';
 import { GameBridge, type GameView } from '../game/GameBridge';
 import { EarthLinkPanel } from '../game/comms/EarthComms';
 import { EquipmentPanel } from '../game/hud/EquipmentPanel';
-import { InteractButton, Joystick, MissionPanel, NolaCaption, ResourceStrip } from '../game/hud/Hud';
+import { InteractButton, Joystick, MissionPanel, NolaCaption } from '../game/hud/Hud';
+import { Hotbar, StatusBar } from '../game/hud/HudBar';
 import { StationMapModal } from '../game/hud/StationMapModal';
 import { EQUIPMENT, findEquipment, findRoom, ROOMS, type EquipmentId } from '../game/stationMap';
 import { BodyStatus } from '../game/sol/BodyStatus';
@@ -161,6 +162,22 @@ function StationGame({ mode }: { mode: ViewMode }) {
     setPaused(paused);
   }, [bridge, paused, setPaused]);
 
+  // Keyboard shortcuts shown on the hotbar: M opens the map, Esc opens the menu.
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const target = event.target as HTMLElement | null;
+      if (paused || (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA'))) return;
+      if (event.key === 'm' || event.key === 'M') setMapOpen(true);
+      if (event.key === 'Escape') {
+        // Without this, the same Esc press would reach the menu's own "close on Esc" and shut it at once.
+        event.preventDefault();
+        setMenuOpen(true);
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [paused]);
+
   // Tell the game what to draw, but only when something visible changed.
   const avatar = profile?.avatar ?? DEFAULT_AVATAR;
   const view = state ? buildView(state, avatar, settings.reduceMotion, solTarget(solSave)) : null;
@@ -246,14 +263,16 @@ function StationGame({ mode }: { mode: ViewMode }) {
       </Suspense>
 
       {/* Everything below floats over the game. Only the controls catch clicks. */}
-      <div className="pointer-events-none absolute inset-0 flex flex-col gap-2 p-2 sm:p-3">
+      {/* Anchored to the edges: the top group to the top, the hotbar group to the bottom, so neither can push the other off screen. */}
+      <div className="pointer-events-none absolute inset-0 p-2 sm:p-3">
         <h1 className="sr-only">NOLA Mission: your space station</h1>
-        <ResourceStrip state={state} />
+        <div className="flex flex-col gap-2">
+        <StatusBar state={state} />
 
         <div className="flex flex-wrap items-start justify-between gap-2 xl:flex-nowrap">
           <div className="flex flex-col gap-2">
             {solSave && (
-              <section aria-label="Today's plan" className="pointer-events-auto w-64 max-w-[70vw] rounded-2xl border-2 border-nola bg-hull/90 p-3 backdrop-blur">
+              <section aria-label="Today's plan" className="pointer-events-auto w-60 max-w-[64vw] sm:w-64 rounded-2xl border-2 border-nola bg-hull/90 p-3 backdrop-blur">
                 <p className="flex justify-between gap-2 text-xs font-bold uppercase tracking-widest text-nola-soft">
                   <span>
                     Sol {solSave.state.sol} of {SOL_LENGTH}
@@ -300,58 +319,63 @@ function StationGame({ mode }: { mode: ViewMode }) {
             )}
           </div>
           <div className="flex flex-col gap-2">
-            <button type="button" onClick={() => setMapOpen(true)} className="pointer-events-auto flex h-12 items-center gap-2 rounded-full border-2 border-line bg-hull/90 px-4 font-bold">
-              <MapIcon aria-hidden="true" size={20} /> Map
-            </button>
-            <button type="button" onClick={() => setMenuOpen(true)} className="pointer-events-auto flex h-12 items-center gap-2 rounded-full border-2 border-line bg-hull/90 px-4 font-bold">
-              <Menu aria-hidden="true" size={20} /> Menu
-            </button>
-            <Link to={mode === '3d' ? '/mission' : '/mission3d'} onClick={sim.saveNow} className="pointer-events-auto flex h-12 items-center gap-2 rounded-full border-2 border-glow bg-hull/90 px-4 font-bold">
-              <Box aria-hidden="true" size={20} /> {mode === '3d' ? '2D view' : '3D view'}
+            <Link to={mode === '3d' ? '/mission' : '/mission3d'} onClick={sim.saveNow} className="pointer-events-auto flex h-12 items-center gap-2 rounded-full border-2 border-glow bg-hull/90 px-3 font-bold sm:px-4" aria-label={mode === '3d' ? '2D view' : '3D view'}>
+              <Box aria-hidden="true" size={20} /> {mode === '3d' ? '2D' : '3D'}
+              <span aria-hidden="true" className="max-sm:hidden">view</span>
             </Link>
             {mode === '3d' && (
-              <div className="pointer-events-auto flex flex-col items-stretch gap-1 rounded-2xl border-2 border-line bg-hull/90 p-1 text-sm font-bold">
+              <div className="pointer-events-auto flex items-center gap-1 rounded-full border-2 border-line bg-hull/90 p-1 text-sm font-bold">
                 <span className="sr-only">Graphics quality</span>
                 {(['low', 'high'] as const).map((option) => (
-                  <button key={option} type="button" aria-pressed={quality === option} onClick={() => changeQuality(option)} className={`min-h-9 rounded-xl px-3 ${quality === option ? 'bg-glow text-void' : 'text-mist'}`}>
+                  <button key={option} type="button" aria-pressed={quality === option} onClick={() => changeQuality(option)} className={`min-h-9 rounded-full px-2.5 sm:px-3 ${quality === option ? 'bg-glow text-void' : 'text-mist'}`}>
                     {option === 'low' ? 'Low' : 'High'}
                   </button>
                 ))}
-                <span className="px-1 text-center text-xs text-mist">{fps === null ? '…' : `${fps} FPS`}</span>
+                <span className="px-2 text-xs text-mist max-sm:hidden">{fps === null ? '…' : `${fps} FPS`}</span>
               </div>
             )}
           </div>
         </div>
 
-        <div className="flex-1" />
-        {(() => {
-          const step = openEquipment === 'console' ? null : tutorialStep(solSave, false);
-          return step ? <TutorialCoach step={step} onSkip={solMission.skipTutorial} /> : null;
-        })()}
+        </div>
 
+        <div className="absolute inset-x-2 bottom-2 flex flex-col gap-2 sm:inset-x-3 sm:bottom-3">
         {commsMessage && (
           <p role="status" className="pointer-events-auto w-fit max-w-md rounded-2xl border-2 border-glow bg-hull/95 px-3 py-2 text-sm font-semibold">
             {commsMessage}
           </p>
         )}
-        <p className="pointer-events-auto w-fit rounded-full bg-hull/90 px-3 py-1 text-sm font-bold" aria-live="polite">
-          {room ? findRoom(room).name : 'Station'}
-          {nearbyName ? ` · Near: ${nearbyName}` : ''}
-        </p>
-        <div className="flex justify-center sm:hidden">
-          <NolaCaption state={state} />
-        </div>
-        <div className="flex items-end justify-between gap-2">
-          <div className="[@media(pointer:fine)]:hidden">
-            <Joystick bridge={bridge} />
-          </div>
-          <div className="hidden text-sm font-bold text-mist [@media(pointer:fine)]:block">
-            <p className="pointer-events-auto rounded-xl bg-hull/90 px-3 py-2">Move: WASD or arrow keys · Use: E{mode === '3d' ? ' · Turn camera: Q / R' : ''}</p>
-          </div>
-          <div className="hidden min-w-0 flex-1 justify-center sm:flex">
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <p className="pointer-events-auto w-fit rounded-full bg-hull/90 px-3 py-1 text-sm font-bold" aria-live="polite">
+            {room ? findRoom(room).name : 'Station'}
+            {nearbyName ? ` · Near: ${nearbyName}` : ''}
+          </p>
+          <div className="order-first flex w-full min-w-0 justify-center sm:order-none sm:w-auto sm:flex-1">
             <NolaCaption state={state} />
           </div>
-          <InteractButton label={nearbyName} onPress={() => nearby && setOpenEquipment(nearby)} />
+          {(() => {
+            const step = openEquipment === 'console' ? null : tutorialStep(solSave, false);
+            return step ? <TutorialCoach step={step} onSkip={solMission.skipTutorial} /> : null;
+          })()}
+        </div>
+        {/* Bottom of the screen, inset from phone notches and home bars. */}
+        <div className="pb-[env(safe-area-inset-bottom)]">
+          <Hotbar
+            state={state}
+            nearbyName={nearbyName}
+            onMap={() => setMapOpen(true)}
+            onMenu={() => setMenuOpen(true)}
+            onUse={() => nearby && setOpenEquipment(nearby)}
+            onTurn={mode === '3d' ? () => bridge.pendingTurns.push(1) : undefined}
+          />
+          <p className="mt-1 hidden text-center text-xs font-semibold text-mist [@media(pointer:fine)]:block">
+            Move: W A S D or arrow keys{mode === '3d' ? ' · Turn camera: Q / R' : ''}
+          </p>
+          {/* Touch screens: the joystick and the big Use button. */}
+          <div className="mt-2 flex items-end justify-between gap-2 [@media(pointer:fine)]:hidden">
+            <Joystick bridge={bridge} />
+            <InteractButton label={nearbyName} onPress={() => nearby && setOpenEquipment(nearby)} />
+          </div>
         </div>
 
         {sim.saveError && (
@@ -359,6 +383,7 @@ function StationGame({ mode }: { mode: ViewMode }) {
             Saving is not working right now. Your progress will be saved when the connection returns.
           </p>
         )}
+        </div>
       </div>
 
       {openEquipment === 'console' && solSave ? (
@@ -374,6 +399,9 @@ function StationGame({ mode }: { mode: ViewMode }) {
         open={mapOpen}
         state={state}
         currentRoom={room}
+        view={view}
+        player={mapOpen ? bridge.playerPosition : null}
+        nearby={nearby}
         onClose={() => setMapOpen(false)}
         onTravel={(id) => {
           bridge.travelTo = id;

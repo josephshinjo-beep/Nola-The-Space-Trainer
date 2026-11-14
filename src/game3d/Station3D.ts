@@ -29,6 +29,31 @@ const FADE_LAG = 0.1; // seconds, for blocks fading out of the way
 /** How close the astronaut must be to use a machine: the same reach as the 2D game (1.45 tiles). */
 export const REACH = 1.45;
 const DOORS = ROOMS.flatMap((room) => room.door.map((door) => ({ ...door, room: room.id })));
+const FOG = 0x070b1f;
+const LAMP_LIGHTS = 4; // at most four real point lights, moved to the lamps nearest the astronaut
+const DUST = { high: 140, low: 60 };
+
+/**
+ * Wall lamps: two on the back wall of each room and a row along the
+ * corridor. Each is a small glowing block; the real lights follow the player.
+ */
+const LAMPS = [
+  ...ROOMS.filter((room) => room.id !== 'corridor').flatMap((room) => [room.x1 + 1, room.x2 - 1].map((x) => ({ x: x + 0.5, y: 1.05, z: room.y1 + 0.08 }))),
+  ...[3, 9, 15, 21, 27, 33].map((x) => ({ x: x + 0.5, y: 1.05, z: 8.08 })),
+];
+
+/** A soft round dot for dust particles, drawn once. */
+function dotTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = 32;
+  const context = canvas.getContext('2d')!;
+  const gradient = context.createRadialGradient(16, 16, 0, 16, 16, 16);
+  gradient.addColorStop(0, 'rgba(255,255,255,1)');
+  gradient.addColorStop(1, 'rgba(255,255,255,0)');
+  context.fillStyle = gradient;
+  context.fillRect(0, 0, 32, 32);
+  return new THREE.CanvasTexture(canvas);
+}
 
 /**
  * A Lambert material whose opacity can be set per instance, through an
@@ -133,6 +158,12 @@ export class Station3D {
   private nearby: EquipmentId | null = null;
   private time = 0;
   private labelPoint = new THREE.Vector3();
+  private sun!: THREE.DirectionalLight;
+  private ambient!: THREE.AmbientLight;
+  private lampLights: THREE.PointLight[] = [];
+  private lampTimer = 0;
+  private dust!: { points: THREE.Points; velocity: Float32Array };
+  private vignette!: HTMLDivElement;
 
   constructor(
     private container: HTMLElement,
@@ -140,7 +171,9 @@ export class Station3D {
   ) {
     this.renderer = this.makeRenderer(options.quality);
     this.grid = buildWalkGrid(new Set(options.bridge.view.lockedRooms));
-    this.scene.background = new THREE.Color(0x070b1f);
+    this.scene.background = new THREE.Color(FOG);
+    // Light fog toward the distance; the camera is about 13 units from the astronaut.
+    this.scene.fog = new THREE.Fog(FOG, 15, 32);
     this.buildLights();
     this.buildFloor();
     this.buildEdges();
@@ -149,6 +182,8 @@ export class Station3D {
     this.buildDoors();
     this.buildAstronaut();
     this.buildMarkers();
+    this.buildLamps();
+    this.buildDust();
     this.buildLabels();
 
     const start = { x: PLAYER_START.x / TILE, z: PLAYER_START.y / TILE };
@@ -182,6 +217,11 @@ export class Station3D {
   private makeRenderer(quality: Quality): THREE.WebGLRenderer {
     const renderer = new THREE.WebGLRenderer({ antialias: quality === 'high', powerPreference: 'high-performance' });
     renderer.setPixelRatio(Math.min(window.devicePixelRatio, quality === 'high' ? 1.5 : 1));
+    // Filmic colour for a more realistic look. One small shadow map on High, none on Low.
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 1.25;
+    renderer.shadowMap.enabled = quality === 'high';
+    renderer.shadowMap.type = THREE.PCFShadowMap;
     renderer.domElement.classList.add('station3d-canvas');
     renderer.domElement.setAttribute('role', 'img');
     renderer.domElement.setAttribute('aria-label', '3D view of your space station from above. Your location, nearby equipment and mission tasks are described in the panels around it.');
@@ -197,6 +237,13 @@ export class Station3D {
     this.renderer.dispose();
     this.renderer.domElement.remove();
     this.renderer = this.makeRenderer(quality);
+    this.sun.castShadow = quality === 'high';
+    // Materials must be recompiled when shadows are switched on or off.
+    this.scene.traverse((object) => {
+      const material = (object as THREE.Mesh).material as THREE.Material | THREE.Material[] | undefined;
+      for (const item of Array.isArray(material) ? material : material ? [material] : []) item.needsUpdate = true;
+    });
+    this.dust.points.geometry.setDrawRange(0, quality === 'high' ? DUST.high : DUST.low);
     this.resize();
     this.renderer.setAnimationLoop(this.frame);
   }
@@ -207,12 +254,20 @@ export class Station3D {
   }
 
   private buildLights(): void {
-    // Step 1 uses simple lights so the shapes read clearly; step 3 replaces them.
-    this.hemisphere = new THREE.HemisphereLight(0x9fb4ff, 0x1a2040, 1.6);
-    this.scene.add(this.hemisphere);
-    const sun = new THREE.DirectionalLight(0xffe2b8, 1.4);
-    sun.position.set(5, 10, 2);
-    this.scene.add(sun);
+    // Dark blue ambient light, a soft sky/floor fill, and one warm directional "sun".
+    this.ambient = new THREE.AmbientLight(0x23305e, 1.1);
+    this.hemisphere = new THREE.HemisphereLight(0x7c93d6, 0x0b1024, 0.9);
+    this.sun = new THREE.DirectionalLight(0xffcf9a, 2.2);
+    this.sun.castShadow = this.options.quality === 'high';
+    const shadow = this.sun.shadow;
+    shadow.mapSize.set(1024, 1024);
+    shadow.camera.left = shadow.camera.bottom = -10;
+    shadow.camera.right = shadow.camera.top = 10;
+    shadow.camera.near = 1;
+    shadow.camera.far = 40;
+    shadow.bias = -0.0006;
+    shadow.normalBias = 0.03;
+    this.scene.add(this.ambient, this.hemisphere, this.sun, this.sun.target);
   }
 
   /** One instanced mesh for every floor tile, with thin dark gaps between tiles. */
@@ -233,13 +288,15 @@ export class Station3D {
       tile.setColorAt(index, color.setHex(FLOOR_SHADES[Math.floor(hash(x, y) * FLOOR_SHADES.length)]!));
     });
     tile.instanceMatrix.needsUpdate = true;
+    tile.receiveShadow = true;
     this.scene.add(tile);
   }
 
   /** Raised block edges along the walkways, where the floor meets a wall. */
   private buildEdges(): void {
     const lips = edgeLips(COLS, ROWS, (x, y) => this.isFloor(x, y));
-    const mesh = new THREE.InstancedMesh(this.track(new THREE.BoxGeometry(1, 0.1, 0.12)), this.track(new THREE.MeshLambertMaterial({ color: 0x5c6c94 })), lips.length);
+    // The raised walkway edges double as glowing light strips.
+    const mesh = new THREE.InstancedMesh(this.track(new THREE.BoxGeometry(1, 0.1, 0.12)), this.track(new THREE.MeshLambertMaterial({ color: 0x2f6f86, emissive: 0x1593a8, emissiveIntensity: 0.9 })), lips.length);
     const matrix = new THREE.Matrix4();
     const turn = new THREE.Matrix4().makeRotationY(Math.PI / 2);
     lips.forEach((lip, index) => {
@@ -270,6 +327,8 @@ export class Station3D {
     const mesh = new THREE.InstancedMesh(geometry, this.track(fadeableMaterial(0xffffff)), tiles.length);
     const color = new THREE.Color();
     tiles.forEach((tile, index) => mesh.setColorAt(index, color.setHex(WALL_SHADES[tile.shade]!)));
+    mesh.castShadow = true;
+    mesh.receiveShadow = true;
     this.walls = { mesh, tiles, side: `${sx},${sz}`, moving: false };
     this.placeWalls();
     this.scene.add(mesh);
@@ -324,6 +383,8 @@ export class Station3D {
       screen.setMatrixAt(index, matrix.makeTranslation(item.x + 0.5, 0.93, item.y + 0.5));
     });
     body.computeBoundingSphere();
+    body.castShadow = true;
+    body.receiveShadow = true;
     this.paintScreens([]);
     this.scene.add(body, screen);
     this.fadeGroups.push(new FadeGroup([body, screen]));
@@ -396,6 +457,82 @@ export class Station3D {
     this.markers = { objective, urgent, alerts, plates, focus, outline };
   }
 
+  /** Glowing lamp blocks on the walls, and the four real lights that follow the astronaut. */
+  private buildLamps(): void {
+    const fixtures = new THREE.InstancedMesh(this.track(new THREE.BoxGeometry(0.34, 0.16, 0.1)), this.track(new THREE.MeshBasicMaterial({ color: 0xffc27a })), LAMPS.length);
+    const matrix = new THREE.Matrix4();
+    LAMPS.forEach((lamp, index) => fixtures.setMatrixAt(index, matrix.makeTranslation(lamp.x, lamp.y, lamp.z)));
+    this.scene.add(fixtures);
+    for (let i = 0; i < LAMP_LIGHTS; i++) {
+      const light = new THREE.PointLight(0xffa860, 0, 7, 1.6);
+      light.position.set(LAMPS[i]!.x, LAMPS[i]!.y, LAMPS[i]!.z + 0.4);
+      this.lampLights.push(light);
+      this.scene.add(light);
+    }
+  }
+
+  /** Moves the four lamp lights to the lamps nearest the astronaut, fading them in and out. */
+  private updateLamps(dt: number): void {
+    const p = this.player.position;
+    this.lampTimer -= dt;
+    if (this.lampTimer <= 0) {
+      this.lampTimer = 0.4;
+      const nearest = [...LAMPS].sort((a, b) => Math.hypot(a.x - p.x, a.z - p.z) - Math.hypot(b.x - p.x, b.z - p.z)).slice(0, LAMP_LIGHTS);
+      // Keep lights that are already on a chosen lamp; move the others.
+      const free = this.lampLights.filter((light) => !nearest.some((lamp) => Math.abs(lamp.x - light.position.x) < 0.01 && Math.abs(lamp.z + 0.4 - light.position.z) < 0.01));
+      for (const lamp of nearest) {
+        const taken = this.lampLights.some((light) => Math.abs(lamp.x - light.position.x) < 0.01 && Math.abs(lamp.z + 0.4 - light.position.z) < 0.01);
+        const light = taken ? undefined : free.shift();
+        if (light) {
+          light.position.set(lamp.x, lamp.y, lamp.z + 0.4);
+          light.intensity = 0;
+        }
+      }
+    }
+    const k = damp(dt, 0.25);
+    const storm = this.options.bridge.view.storm;
+    for (const light of this.lampLights) light.intensity += ((storm ? 3.5 : 5) - light.intensity) * k;
+  }
+
+  /** A few dust motes drifting in the light around the astronaut. */
+  private buildDust(): void {
+    const count = DUST.high;
+    const positions = new Float32Array(count * 3);
+    const velocity = new Float32Array(count * 3);
+    for (let i = 0; i < count; i++) {
+      positions[i * 3] = (hash(i, 1) - 0.5) * 9;
+      positions[i * 3 + 1] = 0.2 + hash(i, 2) * 2.6;
+      positions[i * 3 + 2] = (hash(i, 3) - 0.5) * 9;
+      velocity[i * 3] = (hash(i, 4) - 0.5) * 0.08;
+      velocity[i * 3 + 1] = (hash(i, 5) - 0.3) * 0.05;
+      velocity[i * 3 + 2] = (hash(i, 6) - 0.5) * 0.08;
+    }
+    const geometry = this.track(new THREE.BufferGeometry());
+    geometry.setAttribute('position', new THREE.BufferAttribute(positions, 3).setUsage(THREE.DynamicDrawUsage));
+    geometry.setDrawRange(0, this.options.quality === 'high' ? DUST.high : DUST.low);
+    const material = this.track(new THREE.PointsMaterial({ size: 0.07, map: this.track(dotTexture()), color: 0xd9e6ff, transparent: true, opacity: 0.55, depthWrite: false, blending: THREE.AdditiveBlending, fog: true }));
+    const points = new THREE.Points(geometry, material);
+    points.frustumCulled = false;
+    this.scene.add(points);
+    this.dust = { points, velocity };
+  }
+
+  /** Dust drifts slowly and wraps around a box centred on the astronaut. Still when "Reduce motion" is on. */
+  private updateDust(dt: number): void {
+    const { points, velocity } = this.dust;
+    points.position.set(this.player.position.x, 0, this.player.position.z);
+    if (this.options.bridge.view.reducedMotion) return;
+    const attribute = points.geometry.getAttribute('position') as THREE.BufferAttribute;
+    const array = attribute.array as Float32Array;
+    const wobble = Math.sin(this.time * 0.7);
+    for (let i = 0; i < array.length; i += 3) {
+      array[i] = ((array[i]! + (velocity[i]! + wobble * 0.01) * dt + 4.5 + 9) % 9) - 4.5;
+      array[i + 1] = ((array[i + 1]! + velocity[i + 1]! * dt - 0.2 + 2.8) % 2.8) + 0.2;
+      array[i + 2] = ((array[i + 2]! + velocity[i + 2]! * dt + 4.5 + 9) % 9) - 4.5;
+    }
+    attribute.needsUpdate = true;
+  }
+
   /** Labels drawn as ordinary page content over the 3D view: the name tag and the "Press E" prompt. */
   private buildLabels(): void {
     const make = (className: string) => {
@@ -407,9 +544,21 @@ export class Station3D {
     };
     const name = make('border border-line bg-hull/85 px-2 py-0.5 text-xs text-star');
     name.textContent = this.options.name ?? 'Astronaut';
+    // A soft vignette, drawn with CSS: no post-processing needed.
+    this.vignette = document.createElement('div');
+    this.vignette.className = 'pointer-events-none absolute inset-0';
+    this.vignette.setAttribute('aria-hidden', 'true');
+    this.setVignette(false);
+    this.container.appendChild(this.vignette);
     const prompt = make('bg-glow px-3 py-1 text-sm text-void shadow-lg');
     prompt.style.display = 'none';
     this.labels = { name, prompt };
+  }
+
+  private setVignette(storm: boolean): void {
+    this.vignette.style.background = storm
+      ? 'radial-gradient(ellipse at center, rgba(0,0,0,0) 45%, rgba(90,8,20,0.55) 100%)'
+      : 'radial-gradient(ellipse at center, rgba(0,0,0,0) 52%, rgba(2,4,16,0.72) 100%)';
   }
 
   /** Applies what React wants shown, whenever it changes. */
@@ -425,7 +574,9 @@ export class Station3D {
     });
     this.markers.alerts.instanceMatrix.needsUpdate = true;
     // A solar storm tints the station red.
-    this.hemisphere.color.setHex(view.storm ? 0xff9a9a : 0x9fb4ff);
+    this.hemisphere.color.setHex(view.storm ? 0xd06a6a : 0x7c93d6);
+    this.ambient.color.setHex(view.storm ? 0x4a1d2a : 0x23305e);
+    this.setVignette(view.storm);
   }
 
   /**
@@ -469,6 +620,7 @@ export class Station3D {
       const mesh = new THREE.Mesh(box, material);
       mesh.scale.set(...size);
       mesh.position.set(...position);
+      mesh.castShadow = true;
       this.player.add(mesh);
     };
     part(dark, [0.16, 0.34, 0.18], [-0.1, 0.17, 0]); // legs
@@ -564,6 +716,8 @@ export class Station3D {
       }
     }
 
+    while (bridge.pendingTurns.length > 0) this.rotate(bridge.pendingTurns.shift()!);
+
     if (this.snap) {
       this.snap.elapsed += dt;
       const { yaw, done } = snapYaw(this.snap);
@@ -599,12 +753,18 @@ export class Station3D {
     this.updateOcclusion(dt);
     this.report();
     this.updateMarkers();
+    this.updateLamps(dt);
+    this.updateDust(dt);
+    // The sun and its small shadow map follow the astronaut.
+    this.sun.target.position.set(p.x, 0, p.z);
+    this.sun.position.set(p.x - 5, 12, p.z + 3);
   }
 
   /** Tells React which room the astronaut is in and which machine is in reach, as the 2D game does. */
   private report(): void {
     const bridge = this.options.bridge;
     const p = this.player.position;
+    bridge.playerPosition = { x: p.x, y: p.z };
     const here = roomAtTile(Math.floor(p.x), Math.floor(p.z));
     if (here && here.id !== this.currentRoom) {
       this.currentRoom = here.id;
@@ -703,5 +863,6 @@ export class Station3D {
     this.renderer.domElement.remove();
     this.labels.name.remove();
     this.labels.prompt.remove();
+    this.vignette.remove();
   }
 }

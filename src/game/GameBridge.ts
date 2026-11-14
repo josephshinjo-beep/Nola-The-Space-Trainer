@@ -61,6 +61,10 @@ export class GameBridge {
     this.pauseListeners.add(listener);
     return () => this.pauseListeners.delete(listener);
   }
+  /** Where the astronaut stands, in tiles, when the scene reports it (the 3D view does; used by the station map). */
+  playerPosition: { x: number; y: number } | null = null;
+  /** Camera turns asked for by the HUD's Turn button (3D view only); the 3D scene takes them in order. */
+  pendingTurns: (-1 | 1)[] = [];
   /** Set by React to move the astronaut next to a machine; cleared by the scene. */
   travelTo: EquipmentId | null = null;
 

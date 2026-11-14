@@ -1,118 +1,79 @@
-import { Apple, Check, ChevronDown, ChevronUp, Circle, Droplets, Hand, Heart, Lock, Moon, Radiation, Sun, Thermometer, Wind, Zap, type LucideIcon } from 'lucide-react';
+import { Check, ChevronDown, ChevronUp, Hand, Lock } from 'lucide-react';
 import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { Link } from 'react-router';
 import { NolaMascot } from '../../features/companion/NolaMascot';
 import { moduleForSystem } from '../../features/unlocks/unlockManager';
-import { SIM } from '../../simulation/config';
-import { isSunlit } from '../../simulation/engine';
 import { currentMission, MISSIONS } from '../../simulation/missions';
-import type { LogTone, ResourceId, StationState } from '../../simulation/types';
+import type { LogTone, StationState } from '../../simulation/types';
 import type { GameBridge } from '../GameBridge';
-import { ExplainButton } from '../sol/ResourceExplainer';
-
-const RESOURCES: { id: ResourceId; label: string; icon: LucideIcon }[] = [
-  { id: 'oxygen', label: 'Oxygen', icon: Wind },
-  { id: 'water', label: 'Water', icon: Droplets },
-  { id: 'food', label: 'Food', icon: Apple },
-  { id: 'energy', label: 'Energy', icon: Zap },
-];
-const RESOURCE_SYSTEM = { oxygen: 'oxygen', water: 'water', food: 'food', energy: 'energy' } as const;
 
 const panel = 'rounded-2xl border-2 border-line bg-hull/90 backdrop-blur';
 
-/** Resource bars and station readings. Low levels show the word LOW, not just a colour. */
-export function ResourceStrip({ state }: { state: StationState }) {
-  const day = Math.floor(state.minutes / 1440) + 1;
-  const clock = Math.floor(state.minutes % 1440);
-  const time = `${String(Math.floor(clock / 60)).padStart(2, '0')}:${String(clock % 60).padStart(2, '0')}`;
-  const tempBad = state.temperature < SIM.tooCold || state.temperature > SIM.tooHot;
-  const radiationHigh = state.radiation > SIM.radiationHarmLevel;
-  const sunlit = isSunlit(state.minutes);
-
-  return (
-    <section aria-label="Station resources" className={`${panel} pointer-events-auto p-2 sm:p-3`}>
-      <ul className="grid grid-cols-4 gap-2 sm:gap-3">
-        {RESOURCES.map(({ id, label, icon: Icon }) => {
-          const value = Math.round(state.resources[id]);
-          const auto = !state.unlocked.includes(RESOURCE_SYSTEM[id]);
-          const low = !auto && value < 25;
-          return (
-            <li key={id} className="min-w-0">
-              <div className="flex items-center justify-between gap-1 text-xs font-bold sm:text-sm">
-                <span className="flex min-w-0 items-center gap-1">
-                  <Icon aria-hidden="true" size={16} className={`shrink-0 ${low ? 'text-alert' : 'text-glow'}`} />
-                  <span className="sr-only sm:not-sr-only sm:truncate">{label}</span>
-                  <ExplainButton resource={id === 'energy' ? 'power' : id} className="hidden h-5 w-5 border-0 sm:inline-flex" />
-                </span>
-                <span className={`whitespace-nowrap ${low ? 'text-alert' : ''}`}>{auto ? 'Auto' : `${value}%${low ? ' LOW' : ''}`}</span>
-              </div>
-              <div className="mt-1 h-3 overflow-hidden rounded-full border border-line bg-void" aria-hidden="true">
-                <div
-                  className={`h-full ${auto ? 'bg-line' : low ? 'bg-alert' : 'bg-glow'}`}
-                  style={{ width: `${value}%`, backgroundImage: low ? 'repeating-linear-gradient(45deg, transparent 0 4px, rgb(0 0 0 / 0.35) 4px 8px)' : undefined }}
-                />
-              </div>
-            </li>
-          );
-        })}
-      </ul>
-      <ul className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs font-bold sm:text-sm">
-        <li className={`flex items-center gap-1 ${state.health < 40 ? 'text-alert' : ''}`}>
-          <Heart aria-hidden="true" size={15} /> Crew {Math.round(state.health)}%{state.health < 40 ? ' LOW' : ''}
-        </li>
-        <li className={`flex items-center gap-1 ${tempBad ? 'text-alert' : ''}`}>
-          <Thermometer aria-hidden="true" size={15} /> {Math.round(state.temperature)} °C{tempBad ? (state.temperature > SIM.tooHot ? ' TOO HOT' : ' TOO COLD') : ''}
-        </li>
-        <li className={`flex items-center gap-1 ${radiationHigh ? 'text-alert' : ''}`}>
-          <Radiation aria-hidden="true" size={15} /> Radiation {radiationHigh ? 'HIGH' : state.storm ? 'shielded' : 'normal'}
-        </li>
-        <li className="flex items-center gap-1 text-mist">
-          {sunlit ? <Sun aria-hidden="true" size={15} /> : <Moon aria-hidden="true" size={15} />} {sunlit ? 'Sunlight' : 'Shadow'}
-        </li>
-        <li className="text-mist">
-          Day {day}, {time}
-        </li>
-      </ul>
-    </section>
-  );
-}
-
-/** The current mission and its tasks. */
+/** The current mission and its tasks: progress, the next task highlighted, and a tick that pops when a task is done. */
 export function MissionPanel({ state }: { state: StationState }) {
   // Starts folded on small screens so it does not cover the station.
   const [open, setOpen] = useState(() => window.innerWidth >= 640);
   const mission = currentMission(state);
   const nextLocked = MISSIONS.find((candidate) => !state.unlocked.includes(candidate.system));
   const nextModule = nextLocked ? moduleForSystem(nextLocked.system) : undefined;
+  const done = mission ? mission.tasks.filter((task) => state.completedTasks.includes(task.id)).length : 0;
+  const total = mission?.tasks.length ?? 0;
+  const next = mission?.tasks.find((task) => !state.completedTasks.includes(task.id));
+  const number = mission ? MISSIONS.indexOf(mission) + 1 : MISSIONS.length;
 
   return (
-    <section aria-label="Mission" className={`${panel} pointer-events-auto w-64 max-w-[70vw] p-3`}>
-      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex w-full items-center justify-between gap-2 text-left">
+    <section aria-label="Mission" className={`${panel} pointer-events-auto w-60 max-w-[64vw] overflow-hidden p-0 sm:w-72 sm:max-w-[78vw]`}>
+      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex w-full items-center justify-between gap-2 px-3 pb-2 pt-3 text-left">
         <span className="min-w-0">
-          <span className="block text-xs font-bold uppercase tracking-widest text-nola-soft">{mission ? 'Mission' : 'Missions'}</span>
+          <span className="block text-xs font-bold uppercase tracking-widest text-nola-soft">
+            {mission ? `Mission ${number} of ${MISSIONS.length}` : 'Missions'}
+          </span>
           <span className="block font-display text-lg font-semibold leading-tight">{mission ? mission.title : 'All clear'}</span>
         </span>
-        {open ? <ChevronUp aria-hidden="true" size={20} /> : <ChevronDown aria-hidden="true" size={20} />}
+        <span className="flex items-center gap-2">
+          {mission && (
+            <span className="rounded-full bg-panel px-2 py-0.5 font-display text-sm">
+              {done}/{total}
+            </span>
+          )}
+          {open ? <ChevronUp aria-hidden="true" size={20} /> : <ChevronDown aria-hidden="true" size={20} />}
+        </span>
       </button>
+      {mission && (
+        <div className="mx-3 mb-2 h-1.5 overflow-hidden rounded-full bg-void" role="progressbar" aria-label="Mission progress" aria-valuemin={0} aria-valuemax={total} aria-valuenow={done}>
+          <div className="h-full rounded-full bg-gradient-to-r from-nola to-nola-soft transition-[width] duration-700 ease-out" style={{ width: `${total ? (done / total) * 100 : 0}%` }} />
+        </div>
+      )}
       {open &&
         (mission ? (
-          <ul className="mt-2 space-y-2">
-            {mission.tasks.map((task) => {
-              const done = state.completedTasks.includes(task.id);
+          <ol className="space-y-1 px-2 pb-3">
+            {mission.tasks.map((task, index) => {
+              const isDone = state.completedTasks.includes(task.id);
+              const isNext = task === next;
               return (
-                <li key={task.id} className="flex gap-2 text-sm">
-                  {done ? <Check aria-hidden="true" size={18} className="mt-0.5 shrink-0 text-go" /> : <Circle aria-hidden="true" size={18} className="mt-0.5 shrink-0 text-mist" />}
-                  <span className={done ? 'text-mist line-through' : ''}>
-                    <span className="sr-only">{done ? 'Done: ' : 'To do: '}</span>
+                <li
+                  key={task.id}
+                  className={`flex gap-2 rounded-xl px-2 py-1.5 text-sm transition-colors ${isNext ? 'border-l-4 border-nola bg-nola/10' : 'border-l-4 border-transparent'}`}
+                >
+                  {isDone ? (
+                    <span key="done" className="mt-0.5 flex h-5 w-5 shrink-0 animate-tick-pop items-center justify-center rounded-full bg-go text-void">
+                      <Check aria-hidden="true" size={14} strokeWidth={3} />
+                    </span>
+                  ) : (
+                    <span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 font-display text-[11px] ${isNext ? 'border-nola text-nola-soft' : 'border-line text-mist'}`}>{index + 1}</span>
+                  )}
+                  <span className={`min-w-0 ${isDone ? 'text-mist line-through' : ''}`}>
+                    <span className="sr-only">{isDone ? 'Done: ' : isNext ? 'Next: ' : 'To do: '}</span>
                     {task.label}
-                    {!done && <span className="block text-xs text-mist">{task.hint}</span>}
+                    {isNext && <span className="ml-2 rounded-full bg-nola px-1.5 py-0.5 align-middle text-[10px] font-bold uppercase tracking-wider text-void">Next</span>}
+                    {!isDone && <span className="block text-xs text-mist">{task.hint}</span>}
                   </span>
                 </li>
               );
             })}
-          </ul>
+          </ol>
         ) : (
-          <p className="mt-2 text-sm text-mist">
+          <p className="px-3 pb-3 text-sm text-mist">
             {nextModule ? (
               <>
                 <Lock aria-hidden="true" size={14} className="mr-1 inline" />
