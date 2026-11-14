@@ -14,6 +14,8 @@ interface PanelProps {
   dispatch: (action: Action) => ActionResult;
   weather: SpaceWeather;
   onClose: () => void;
+  /** Today's urgent sol job, when it happens at this machine. */
+  urgent?: { text: string; done: boolean; onDo: () => void } | null;
 }
 
 /** A labelled note that says whether something is real science or a game simplification. */
@@ -45,7 +47,7 @@ const formatHours = (hours: number) => (hours < 1 ? `${Math.max(1, Math.round(ho
  * broken, the repair mini-game. All of it is ordinary web content, so it
  * works with a keyboard and a screen reader.
  */
-export function EquipmentPanel({ id, state, dispatch, weather, onClose }: PanelProps) {
+export function EquipmentPanel({ id, state, dispatch, weather, onClose, urgent }: PanelProps) {
   const item = findEquipment(id);
   const [message, setMessage] = useState<string | null>(null);
   const fault: FaultId | undefined = item.faults.find((candidate) => state.faults.includes(candidate));
@@ -250,6 +252,19 @@ export function EquipmentPanel({ id, state, dispatch, weather, onClose }: PanelP
   return (
     <Modal open title={item.name} onClose={onClose} wide>
       <div className="space-y-4">
+        {urgent && (
+          <section aria-label="Urgent job" className={`rounded-2xl border-2 p-4 ${urgent.done ? 'border-go bg-go/10' : 'border-nola bg-nola/10'}`}>
+            <p className="font-display text-lg font-semibold">{urgent.done ? 'Urgent job done!' : 'Urgent job'}</p>
+            <p className="text-lg">{urgent.text}</p>
+            {urgent.done ? (
+              <p className="mt-2 text-base text-mist">Go back to the Command Console to end the sol.</p>
+            ) : (
+              <Button className="mt-3" onClick={urgent.onDo}>
+                Do the urgent job
+              </Button>
+            )}
+          </section>
+        )}
         {body}
         <p role="status" className="min-h-7 text-lg font-semibold text-glow">
           {message}

@@ -12,7 +12,7 @@ import { AchievementsPanel, LearningHistoryPanel } from '../features/profile/Pro
 import type { StationStats } from '../features/academy/achievements';
 import { useAcademyProgress } from '../features/academy/AcademyProgressContext';
 import { getStationStats } from '../simulation/engine';
-import { deleteSimulation, loadSimulation } from '../services/simulationRepository';
+import { deleteSimulation, deleteSolMission, loadSimulation } from '../services/simulationRepository';
 import { updateDisplayName } from '../services/userRepository';
 
 type Confirming = 'course' | 'station' | null;
@@ -62,7 +62,7 @@ export function ProfilePage() {
     if (!uid) return;
     try {
       // Restarting the course also restarts the station, because its systems are earned by lessons.
-      await deleteSimulation(uid);
+      await Promise.all([deleteSimulation(uid), deleteSolMission(uid)]);
       setStation(null);
       setHasSave(false);
       if (what === 'course') await resetCourse();

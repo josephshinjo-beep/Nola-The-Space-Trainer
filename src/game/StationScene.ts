@@ -16,6 +16,8 @@ interface EquipmentSprite {
   screen: Phaser.GameObjects.Rectangle;
   alert: Phaser.GameObjects.Container;
   arrow: Phaser.GameObjects.Container;
+  /** Glowing ring for today's urgent sol job. */
+  ring: Phaser.GameObjects.Container;
   plants?: Phaser.GameObjects.Graphics;
 }
 
@@ -167,7 +169,14 @@ export class StationScene extends Phaser.Scene {
     pointer.lineStyle(3, 0xffffff).strokeTriangle(0, tip, 15, -tip, -15, -tip);
     const arrow = this.add.container(cx, markerY, [pointer]).setDepth(12).setVisible(false);
 
-    const sprite: EquipmentSprite = { item, screen, alert, arrow };
+    // A glowing orange ring with a star badge marks today's urgent job.
+    const ringShape = this.add.graphics();
+    ringShape.lineStyle(10, 0xff7a1a, 0.35).strokeRoundedRect(-44, -44, 88, 88, 18);
+    ringShape.lineStyle(4, 0xffb070, 1).strokeRoundedRect(-44, -44, 88, 88, 18);
+    const badge = this.add.star(40, -40, 5, 7, 15, 0xff7a1a).setStrokeStyle(2, 0xffffff);
+    const ring = this.add.container(cx, cy, [ringShape, badge]).setDepth(9).setVisible(false);
+
+    const sprite: EquipmentSprite = { item, screen, alert, arrow, ring };
     if (item.id === 'growbed') sprite.plants = this.add.graphics().setDepth(7);
     return sprite;
   }
@@ -207,6 +216,7 @@ export class StationScene extends Phaser.Scene {
       const alert = view.alerts.includes(id);
       sprite.alert.setVisible(alert);
       sprite.arrow.setVisible(!alert && view.target === id);
+      sprite.ring.setVisible(view.urgent === id);
       sprite.screen.setFillStyle(alert ? 0x7a1f1f : view.running.includes(id) ? 0x0d6b78 : 0x26315f);
       if (sprite.plants) {
         const cx = (sprite.item.x + 0.5) * TILE;
@@ -319,6 +329,7 @@ export class StationScene extends Phaser.Scene {
         sprite.arrow.y = (sprite.item.y + 0.5) * TILE + (sprite.item.y < ROWS / 2 ? 82 : -82) + bob;
       }
       if (bridge.view.storm) this.stormOverlay.setAlpha(0.7 + Math.sin(time / 400) * 0.3);
+      for (const sprite of this.sprites) if (sprite.ring.visible) sprite.ring.setScale(1 + Math.sin(time / 260) * 0.06);
     }
   }
 }

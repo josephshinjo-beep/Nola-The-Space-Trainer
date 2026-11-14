@@ -20,6 +20,11 @@ function playSol(state: SolState, decisions: string[] = [], report?: ActionRepor
 }
 
 const start = () => createSolState();
+/** Ends the decision phase and completes every planned task. */
+const doTasks = (state: SolState) => {
+  const s = ok(endDecisionPhase(state));
+  return ok(resolveActionPhase(s, { completed: s.plannedTasks.map((task) => task.taskId), failed: [] }));
+};
 const initial = () => Object.fromEntries(RESOURCES.map((r) => [r, C.start[r].value])) as Record<(typeof RESOURCES)[number], number>;
 
 /** Every value in the config tree, with its path. */
@@ -90,13 +95,25 @@ describe('the trade-off rule: no decision is free', () => {
 });
 
 describe('making decisions', () => {
-  it('applies exactly the declared gains and costs, and records them in the ledger', () => {
-    const s = ok(choose(start(), 'boost-oxygen-generator'));
+  it('takes the costs when chosen, and gives the gains when the task is done', () => {
+    const chosen = ok(choose(start(), 'boost-oxygen-generator'));
     const A = DECISION_AMOUNTS.boostOxygenGenerator;
-    expect(s.resources.oxygen).toBe(C.start.oxygen.value + A.oxygenGain.value);
-    expect(s.resources.water).toBe(C.start.water.value - A.waterCost.value);
-    expect(s.resources.power).toBe(C.start.power.value - A.powerCost.value);
-    expect(s.ledger.at(-1)).toMatchObject({ sol: 1, phase: 'decision', source: 'boost-oxygen-generator', gave: { oxygen: 2 }, cost: { water: 2.25, power: 10 } });
+    expect(chosen.resources.oxygen).toBe(C.start.oxygen.value);
+    expect(chosen.resources.water).toBe(C.start.water.value - A.waterCost.value);
+    expect(chosen.resources.power).toBe(C.start.power.value - A.powerCost.value);
+    expect(chosen.ledger.at(-1)).toMatchObject({ sol: 1, phase: 'decision', source: 'boost-oxygen-generator', gave: {}, cost: { water: 2.25, power: 10 } });
+    const done = doTasks(chosen);
+    expect(done.resources.oxygen).toBe(C.start.oxygen.value + A.oxygenGain.value);
+    expect(done.ledger.at(-1)).toMatchObject({ phase: 'action', source: 'boost-oxygen-generator', gave: { oxygen: 2 }, cost: {} });
+  });
+
+  it('every decision creates exactly one task, so its gains depend on the action phase', () => {
+    for (const decision of DECISIONS) {
+      expect(decision.gainsAfterAction, decision.id).toBeDefined();
+      const s = ok(choose(start(), decision.id));
+      expect(s.plannedTasks, decision.id).toHaveLength(1);
+    }
+    expect(new Set(DECISIONS.map((d) => d.gainsAfterAction!.taskId)).size).toBe(DECISIONS.length);
   });
 
   it('spends oxygen for an extra research task, paying out only when the task succeeds', () => {
@@ -115,10 +132,10 @@ describe('making decisions', () => {
 
   it('diverting power to shielding makes tonight cold, and the cost is recorded against that decision', () => {
     let s = ok(choose(start(), 'divert-power-heating'));
-    expect(s.resources.shielding).toBe(C.start.shielding.value + 12);
     expect(s.resources.power).toBe(C.start.power.value - 12);
     expect(s.tonight.heatingLow).toBe(true);
-    s = ok(resolveActionPhase(ok(endDecisionPhase(s)), { completed: [], failed: [] }));
+    s = doTasks(s);
+    expect(s.resources.shielding).toBe(C.start.shielding.value + 12);
     const night = ok(endSol(s));
     const report = decisionReport(night, 'divert-power-heating', 1);
     expect(report).toEqual({ gave: { shielding: 12 }, cost: { power: 12, crewHealth: C.health.coldNightLoss.value } });
@@ -137,7 +154,7 @@ describe('making decisions', () => {
   });
 
   it('skipping maintenance rests the crew but wears the shield', () => {
-    const s = ok(choose(start(), 'skip-maintenance'));
+    const s = doTasks(ok(choose(start(), 'skip-maintenance')));
     expect(s.resources.crewHealth).toBe(C.start.crewHealth.value + 4);
     expect(s.resources.shielding).toBe(C.start.shielding.value - 6);
   });
@@ -207,7 +224,7 @@ describe('phases', () => {
         if (whyNot(t, id) === null) t = ok(choose(t, id));
         else if (/Not enough power/.test(whyNot(t, id)!)) refused += 1;
       }
-      s = ok(endSol(ok(resolveActionPhase(ok(endDecisionPhase(t)), { completed: [], failed: [] }))));
+      s = ok(endSol(doTasks(t)));
     }
     // A clear night with no spending leaves the batteries at capacity minus the night load.
     const restingLevel = C.capacity.power.value - (C.power.lifeSupportLoad.value + C.power.oxygenGeneratorLoad.value + C.power.heatingNormalLoad.value + C.power.greenhouseLoad.value);
@@ -320,9 +337,10 @@ describe('the ledger', () => {
 
   it('records only what was really applied when a store is full', () => {
     const full: SolState = { ...start(), resources: { ...start().resources, crewHealth: 98 } };
-    const s = ok(choose(full, 'rest-day'));
+    const s = doTasks(ok(choose(full, 'rest-day')));
     expect(s.resources.crewHealth).toBe(100);
-    expect(s.ledger.at(-1)).toMatchObject({ gave: { crewHealth: 2 }, cost: { food: 1.5 } });
+    expect(s.ledger.at(-2)).toMatchObject({ phase: 'decision', cost: { food: 1.5 } });
+    expect(s.ledger.at(-1)).toMatchObject({ phase: 'action', gave: { crewHealth: 2 } });
   });
 
   it('every ledger entry for a decision shows something it cost', () => {

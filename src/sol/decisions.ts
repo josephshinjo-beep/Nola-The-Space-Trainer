@@ -8,6 +8,9 @@ import type { Decision } from './types';
  * least one resource other than the ones it gives. `validateDecision`
  * enforces this, and the engine refuses to use a decision that breaks it.
  * All amounts come from config.ts.
+ *
+ * Every decision creates one task for the action phase. Its costs are paid
+ * when it is chosen; its gains arrive only when the task is completed.
  */
 export const DECISIONS: Decision[] = [
   {
@@ -26,6 +29,8 @@ export const DECISIONS: Decision[] = [
     costs: { power: A.divertPowerToShielding.powerFromHeating },
     deferredCosts: { crewHealth: SOL_CONFIG.health.coldNightLoss },
     nightEffect: 'heatingLow',
+
+    gainsAfterAction: { taskId: 'heater-down', taskLabel: 'Turn the heater down at the Thermal Controller' },
   },
   {
     id: 'divert-power-greenhouse',
@@ -35,6 +40,8 @@ export const DECISIONS: Decision[] = [
     costs: { power: A.divertPowerToShielding.powerFromGreenhouse },
     deferredCosts: { food: SOL_CONFIG.greenhouse.yieldPerSol },
     nightEffect: 'greenhouseOff',
+
+    gainsAfterAction: { taskId: 'lights-off', taskLabel: 'Switch off the grow lights in the Hydroponics Lab' },
   },
   {
     id: 'skip-maintenance',
@@ -42,6 +49,8 @@ export const DECISIONS: Decision[] = [
     summary: 'Let the crew rest instead of doing maintenance. The shielding wears down unrepaired.',
     gains: { crewHealth: A.skipMaintenance.crewHealthGain },
     costs: { shielding: A.skipMaintenance.shieldingCost },
+
+    gainsAfterAction: { taskId: 'crew-rest', taskLabel: 'Send the crew to rest at the Med Station' },
   },
   {
     id: 'maintenance-eva',
@@ -65,6 +74,8 @@ export const DECISIONS: Decision[] = [
     summary: 'Split extra water into oxygen. Uses water and a lot of power.',
     gains: { oxygen: A.boostOxygenGenerator.oxygenGain },
     costs: { water: A.boostOxygenGenerator.waterCost, power: A.boostOxygenGenerator.powerCost },
+
+    gainsAfterAction: { taskId: 'oxygen-boost', taskLabel: 'Turn up the Oxygen Generator' },
   },
   {
     id: 'push-water-recycler',
@@ -72,6 +83,8 @@ export const DECISIONS: Decision[] = [
     summary: 'Recover extra water at the cost of power.',
     gains: { water: A.pushWaterRecycler.waterGain },
     costs: { power: A.pushWaterRecycler.powerCost },
+
+    gainsAfterAction: { taskId: 'water-boost', taskLabel: 'Turn up the Water Recycler' },
   },
   {
     id: 'ration-meals',
@@ -79,6 +92,8 @@ export const DECISIONS: Decision[] = [
     summary: 'Serve smaller meals to save food. The crew feels weaker.',
     gains: { food: A.rationMeals.foodGain },
     costs: { crewHealth: A.rationMeals.crewHealthCost },
+
+    gainsAfterAction: { taskId: 'smaller-meals', taskLabel: 'Pack smaller meals in the Hydroponics Lab' },
   },
   {
     id: 'rest-day',
@@ -86,6 +101,8 @@ export const DECISIONS: Decision[] = [
     summary: 'Give the crew a full day off with an extra recovery meal.',
     gains: { crewHealth: A.restDay.crewHealthGain },
     costs: { food: A.restDay.foodCost },
+
+    gainsAfterAction: { taskId: 'rest-checkup', taskLabel: 'Give the crew a check-up at the Med Station' },
   },
   {
     id: 'boost-greenhouse-lights',
@@ -93,6 +110,8 @@ export const DECISIONS: Decision[] = [
     summary: 'Keep the grow lights on longer for a bigger harvest. Uses power and irrigation water.',
     gains: { food: A.boostGreenhouseLights.foodGain },
     costs: { power: A.boostGreenhouseLights.powerCost, water: A.boostGreenhouseLights.waterCost },
+
+    gainsAfterAction: { taskId: 'grow-lights', taskLabel: 'Turn up the grow lights in the Hydroponics Lab' },
   },
   {
     id: 'report-to-earth',
@@ -100,6 +119,8 @@ export const DECISIONS: Decision[] = [
     summary: 'Use the long-range radio to send results to mission control.',
     gains: { research: A.reportToEarth.researchGain },
     costs: { power: A.reportToEarth.powerCost },
+
+    gainsAfterAction: { taskId: 'earth-report', taskLabel: 'Send the results from the Antenna Console' },
   },
 ];
 

@@ -30,6 +30,8 @@ export interface GameView {
   alerts: EquipmentId[];
   /** The machine for the next mission task (shown with an arrow). */
   target: EquipmentId | null;
+  /** The machine for today's urgent sol job (shown with a glowing orange ring). */
+  urgent: EquipmentId | null;
   /** Machines that are switched on and working. */
   running: EquipmentId[];
   cropStage: 'empty' | 'growing' | 'ready';
@@ -50,6 +52,7 @@ export class GameBridge {
     lockedRooms: [],
     alerts: [],
     target: null,
+    urgent: null,
     running: [],
     cropStage: 'empty',
     storm: false,

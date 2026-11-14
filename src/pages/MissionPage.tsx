@@ -17,10 +17,16 @@ import { EquipmentPanel } from '../game/hud/EquipmentPanel';
 import { InteractButton, Joystick, MissionPanel, NolaCaption, ResourceStrip } from '../game/hud/Hud';
 import { StationMapModal } from '../game/hud/StationMapModal';
 import { EQUIPMENT, findEquipment, findRoom, ROOMS, type EquipmentId } from '../game/stationMap';
+import { SolBriefing, solHint } from '../game/sol/SolBriefing';
+import { urgentJob, type SolSave } from '../game/sol/solFlow';
+import { useSolMission } from '../game/sol/useSolMission';
 import { useSimulation } from '../game/useSimulation';
 import { DEFAULT_INPUTS, machineStatus } from '../simulation/engine';
+import { SOL_CONFIG } from '../sol/config';
 import { currentMission } from '../simulation/missions';
 import type { RoomId, StationState } from '../simulation/types';
+
+const SOL_LENGTH = SOL_CONFIG.time.missionLengthSols.value;
 
 // Phaser is large, so it is downloaded only when the game is opened.
 const PhaserGame = lazy(() => import('../game/PhaserGame'));
@@ -35,7 +41,15 @@ function missionTarget(state: StationState): EquipmentId | null {
   return EQUIPMENT.find((item) => item.tasks.includes(task.id))?.id ?? null;
 }
 
-function buildView(state: StationState, avatar: GameView['avatar'], reducedMotion: boolean): GameView {
+/** Where today's sol says to go: the console to plan or finish, or the urgent job's machine. */
+function solTarget(save: SolSave | null): EquipmentId | null {
+  if (!save || save.state.status !== 'active') return null;
+  if (save.state.phase === 'decision') return 'console';
+  const job = urgentJob(save);
+  return job && !job.done ? job.card.urgent.equipment : 'console';
+}
+
+function buildView(state: StationState, avatar: GameView['avatar'], reducedMotion: boolean, urgent: EquipmentId | null): GameView {
   const running = machineStatus(state);
   const on: EquipmentId[] = [];
   if (running.oxygenGenerator) on.push('generator');
@@ -47,6 +61,7 @@ function buildView(state: StationState, avatar: GameView['avatar'], reducedMotio
     lockedRooms: ROOMS.filter((room) => !state.unlocked.includes(room.system)).map((room) => room.id),
     alerts: EQUIPMENT.filter((item) => item.faults.some((fault) => state.faults.includes(fault))).map((item) => item.id),
     target: missionTarget(state),
+    urgent,
     running: on,
     cropStage: state.crop.stage,
     storm: state.storm !== null,
@@ -73,6 +88,8 @@ function StationGame() {
   const weatherInputs = weather.summary?.inputs ?? DEFAULT_INPUTS.spaceWeather;
   const sim = useSimulation(user?.uid, unlockedSystems, () => ({ inShelter: roomRef.current === 'shelter', spaceWeather: weatherInputs }));
   const { state, dispatch, setPaused } = sim;
+  const solMission = useSolMission(user?.uid);
+  const solSave = solMission.save;
 
   // The game fills the screen, so the star background behind it can rest.
   useEffect(() => pauseSpaceBackdrop(), []);
@@ -100,13 +117,25 @@ function StationGame() {
 
   // Tell the game what to draw, but only when something visible changed.
   const avatar = profile?.avatar ?? DEFAULT_AVATAR;
-  const view = state ? buildView(state, avatar, settings.reduceMotion) : null;
+  const view = state ? buildView(state, avatar, settings.reduceMotion, solTarget(solSave)) : null;
   const viewKey = view ? JSON.stringify(view) : '';
   useEffect(() => {
     if (viewKey) bridge.setView(JSON.parse(viewKey) as GameView);
   }, [bridge, viewKey]);
 
   const closePanel = useCallback(() => setOpenEquipment(null), []);
+
+  // Opening the Command Console still counts for the "Find your feet" mission.
+  useEffect(() => {
+    if (openEquipment === 'console') dispatch({ type: 'useConsole' });
+  }, [openEquipment, dispatch]);
+
+  // Today's urgent job, if it happens at the machine that is open.
+  const job = solSave ? urgentJob(solSave) : null;
+  const urgentHere =
+    job && openEquipment === job.card.urgent.equipment && solSave?.state.phase === 'action'
+      ? { text: job.card.urgent.text, done: job.done, onDo: () => solMission.completeJob(job.taskId) }
+      : null;
 
   if (sim.loadError) {
     return (
@@ -146,7 +175,19 @@ function StationGame() {
         <ResourceStrip state={state} />
 
         <div className="flex items-start justify-between gap-2">
-          <MissionPanel state={state} />
+          <div className="flex flex-col gap-2">
+            {solSave && (
+              <section aria-label="Today's plan" className="pointer-events-auto w-64 max-w-[70vw] rounded-2xl border-2 border-nola bg-hull/90 p-3 backdrop-blur">
+                <p className="text-xs font-bold uppercase tracking-widest text-nola-soft">
+                  Sol {solSave.state.sol} of {SOL_LENGTH}
+                </p>
+                <p aria-live="polite" className="text-sm font-semibold">
+                  {solHint(solSave)}
+                </p>
+              </section>
+            )}
+            <MissionPanel state={state} />
+          </div>
           <div className="flex flex-col gap-2">
             <button type="button" onClick={() => setMapOpen(true)} className="pointer-events-auto flex h-12 items-center gap-2 rounded-full border-2 border-line bg-hull/90 px-4 font-bold">
               <MapIcon aria-hidden="true" size={20} /> Map
@@ -186,7 +227,11 @@ function StationGame() {
         )}
       </div>
 
-      {openEquipment && <EquipmentPanel id={openEquipment} state={state} dispatch={dispatch} weather={weather} onClose={closePanel} />}
+      {openEquipment === 'console' && solSave ? (
+        <SolBriefing save={solSave} unlocked={unlockedSystems} onPlan={solMission.plan} onSkip={solMission.skip} onFinish={solMission.finish} onClose={closePanel} />
+      ) : (
+        openEquipment && <EquipmentPanel id={openEquipment} state={state} dispatch={dispatch} weather={weather} onClose={closePanel} urgent={urgentHere} />
+      )}
 
       <StationMapModal
         open={mapOpen}
@@ -229,6 +274,7 @@ function StationGame() {
         onConfirm={() => {
           setConfirmRestart(false);
           void sim.restart();
+          void solMission.restart();
         }}
         onCancel={() => setConfirmRestart(false)}
       />
