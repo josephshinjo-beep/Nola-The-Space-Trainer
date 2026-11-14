@@ -42,6 +42,21 @@ const LAMPS = [
   ...[3, 9, 15, 21, 27, 33].map((x) => ({ x: x + 0.5, y: 1.05, z: 8.08 })),
 ];
 
+/** A vertical fade for light beams: bright at the floor, clear at the top. */
+function beamTexture(): THREE.CanvasTexture {
+  const canvas = document.createElement('canvas');
+  canvas.width = 4;
+  canvas.height = 64;
+  const context = canvas.getContext('2d')!;
+  const gradient = context.createLinearGradient(0, 0, 0, 64);
+  gradient.addColorStop(0, 'rgba(255,255,255,0)');
+  gradient.addColorStop(0.7, 'rgba(255,255,255,0.35)');
+  gradient.addColorStop(1, 'rgba(255,255,255,0.9)');
+  context.fillStyle = gradient;
+  context.fillRect(0, 0, 4, 64);
+  return new THREE.CanvasTexture(canvas);
+}
+
 /** A soft round dot for dust particles, drawn once. */
 function dotTexture(): THREE.CanvasTexture {
   const canvas = document.createElement('canvas');
@@ -153,7 +168,11 @@ export class Station3D {
   private screens!: THREE.InstancedMesh;
   private hemisphere!: THREE.HemisphereLight;
   private markers!: { objective: THREE.Mesh; urgent: THREE.Mesh; alerts: THREE.InstancedMesh; plates: THREE.InstancedMesh; focus: THREE.Mesh; outline: THREE.Group };
-  private labels!: { name: HTMLDivElement; prompt: HTMLDivElement };
+  private labels!: { name: HTMLDivElement; prompt: HTMLDivElement; objective: HTMLDivElement; urgent: HTMLDivElement };
+  private rig!: { hipL: THREE.Group; hipR: THREE.Group; shoulderL: THREE.Group; shoulderR: THREE.Group; torso: THREE.Group };
+  private walkPhase = 0;
+  private walkAmount = 0;
+  private spots!: { beams: THREE.Mesh[]; rings: THREE.InstancedMesh };
   private currentRoom: RoomId | null = null;
   private nearby: EquipmentId | null = null;
   private time = 0;
@@ -455,6 +474,27 @@ export class Station3D {
     }
     this.scene.add(objective, urgent, alerts, plates, focus, outline);
     this.markers = { objective, urgent, alerts, plates, focus, outline };
+
+    // Task spots, made easy to notice: a tall beam of light over the next
+    // task (yellow) and the urgent job (orange), and a pulsing ring on the
+    // floor around every machine that needs you (red for repairs).
+    const beamGeometry = this.track(new THREE.CylinderGeometry(0.42, 0.5, 5, 24, 1, true).translate(0, 2.5, 0));
+    const fade = this.track(beamTexture());
+    const beams = [0xffd23f, 0xff7a1a].map((color) => {
+      const beam = new THREE.Mesh(beamGeometry, this.track(new THREE.MeshBasicMaterial({ color, map: fade, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, side: THREE.DoubleSide, fog: false })));
+      beam.visible = false;
+      beam.renderOrder = 2;
+      this.scene.add(beam);
+      return beam;
+    });
+    const rings = new THREE.InstancedMesh(this.track(new THREE.RingGeometry(0.62, 0.8, 40).rotateX(-Math.PI / 2)), this.track(new THREE.MeshBasicMaterial({ color: 0xffffff, transparent: true, opacity: 0.85, depthWrite: false, side: THREE.DoubleSide })), EQUIPMENT.length);
+    rings.frustumCulled = false;
+    EQUIPMENT.forEach((_, index) => {
+      rings.setMatrixAt(index, new THREE.Matrix4().makeScale(0, 0, 0));
+      rings.setColorAt(index, new THREE.Color(0xffffff));
+    });
+    this.scene.add(rings);
+    this.spots = { beams, rings };
   }
 
   /** Glowing lamp blocks on the walls, and the four real lights that follow the astronaut. */
@@ -552,7 +592,12 @@ export class Station3D {
     this.container.appendChild(this.vignette);
     const prompt = make('bg-glow px-3 py-1 text-sm text-void shadow-lg');
     prompt.style.display = 'none';
-    this.labels = { name, prompt };
+    // Task labels. When the task is off screen, they stick to the screen edge with an arrow pointing to it.
+    // Drawn above the HUD layer (z-30), so a task arrow at the screen edge is never hidden behind a panel.
+    const objective = make('z-30 border-2 border-void bg-[#ffd23f] px-3 py-1 text-sm text-void shadow-lg');
+    const urgent = make('z-30 border-2 border-void bg-nola px-3 py-1 text-sm text-void shadow-lg');
+    objective.style.display = urgent.style.display = 'none';
+    this.labels = { name, prompt, objective, urgent };
   }
 
   private setVignette(storm: boolean): void {
@@ -616,21 +661,41 @@ export class Station3D {
     const dark = this.track(new THREE.MeshLambertMaterial({ color: 0x9aa3bf }));
     const visor = this.track(new THREE.MeshLambertMaterial({ color: 0x3de0f5, emissive: 0x0c4a55 }));
     const pack = this.track(new THREE.MeshLambertMaterial({ color: 0xff7a1a }));
-    const part = (material: THREE.Material, size: [number, number, number], position: [number, number, number]) => {
+    const boot = this.track(new THREE.MeshLambertMaterial({ color: 0x5b6480 }));
+    const part = (parent: THREE.Object3D, material: THREE.Material, size: [number, number, number], position: [number, number, number]) => {
       const mesh = new THREE.Mesh(box, material);
       mesh.scale.set(...size);
       mesh.position.set(...position);
       mesh.castShadow = true;
-      this.player.add(mesh);
+      parent.add(mesh);
+      return mesh;
     };
-    part(dark, [0.16, 0.34, 0.18], [-0.1, 0.17, 0]); // legs
-    part(dark, [0.16, 0.34, 0.18], [0.1, 0.17, 0]);
-    part(suit, [0.42, 0.38, 0.26], [0, 0.53, 0]); // body
-    part(suit, [0.12, 0.32, 0.14], [-0.28, 0.54, 0]); // arms
-    part(suit, [0.12, 0.32, 0.14], [0.28, 0.54, 0]);
-    part(pack, [0.34, 0.32, 0.12], [0, 0.56, -0.19]); // backpack
-    part(suit, [0.36, 0.32, 0.32], [0, 0.88, 0]); // helmet
-    part(visor, [0.28, 0.16, 0.04], [0, 0.9, 0.165]); // visor (faces +z, the front)
+    /** A joint: limbs hang from it, so turning it swings the limb like a hip or a shoulder. */
+    const joint = (parent: THREE.Object3D, x: number, y: number) => {
+      const pivot = new THREE.Group();
+      pivot.position.set(x, y, 0);
+      parent.add(pivot);
+      return pivot;
+    };
+    // Legs swing from the hips; each has a darker boot at the bottom.
+    const hipL = joint(this.player, -0.1, 0.34);
+    const hipR = joint(this.player, 0.1, 0.34);
+    for (const hip of [hipL, hipR]) {
+      part(hip, dark, [0.16, 0.28, 0.18], [0, -0.14, 0]);
+      part(hip, boot, [0.17, 0.08, 0.22], [0, -0.3, 0.02]);
+    }
+    // The upper body bobs as a whole while walking.
+    const torso = new THREE.Group();
+    this.player.add(torso);
+    part(torso, suit, [0.42, 0.38, 0.26], [0, 0.53, 0]); // body
+    part(torso, pack, [0.34, 0.32, 0.12], [0, 0.56, -0.19]); // backpack
+    part(torso, suit, [0.36, 0.32, 0.32], [0, 0.88, 0]); // helmet
+    part(torso, visor, [0.28, 0.16, 0.04], [0, 0.9, 0.165]); // visor (faces +z, the front)
+    // Arms swing from the shoulders, opposite to the legs.
+    const shoulderL = joint(torso, -0.28, 0.7);
+    const shoulderR = joint(torso, 0.28, 0.7);
+    for (const shoulder of [shoulderL, shoulderR]) part(shoulder, suit, [0.12, 0.32, 0.14], [0, -0.16, 0]);
+    this.rig = { hipL, hipR, shoulderL, shoulderR, torso };
     this.scene.add(this.player);
   }
 
@@ -729,6 +794,7 @@ export class Station3D {
     const { x: ix, y: iy } = this.input();
     const move = screenToWorld(ix, iy, this.yaw);
     const p = this.player.position;
+    const before = { x: p.x, z: p.z };
     const nx = p.x + move.x * SPEED * dt;
     const nz = p.z + move.z * SPEED * dt;
     if (!this.blocked(nx, p.z)) p.x = nx;
@@ -741,6 +807,8 @@ export class Station3D {
       this.heading += angleDelta(this.heading, target) * damp(dt, TURN_LAG);
       this.player.rotation.y = this.heading;
     }
+    // The legs follow how far the astronaut really moved, so they stop when walking into a wall.
+    this.animateWalk(dt, dt > 0 ? Math.hypot(p.x - before.x, p.z - before.z) / (SPEED * dt) : 0);
 
     // Damped follow: look at the astronaut plus a small lead in the movement direction.
     const lead = { x: p.x + move.x * LOOK_LEAD, z: p.z + move.z * LOOK_LEAD };
@@ -758,6 +826,26 @@ export class Station3D {
     // The sun and its small shadow map follow the astronaut.
     this.sun.target.position.set(p.x, 0, p.z);
     this.sun.position.set(p.x - 5, 12, p.z + 3);
+  }
+
+  /**
+   * The walk cycle: legs swing from the hips and arms from the shoulders in
+   * opposite pairs, and the upper body bobs with each step. When the
+   * astronaut stops, the limbs ease back to standing.
+   */
+  private animateWalk(dt: number, speed: number): void {
+    const moving = speed > 0.05;
+    this.walkAmount += ((moving ? 1 : 0) - this.walkAmount) * damp(dt, 0.1);
+    // About two steps per second at full speed.
+    if (moving) this.walkPhase += dt * 9 * Math.min(1, speed);
+    const swing = Math.sin(this.walkPhase) * this.walkAmount;
+    const { hipL, hipR, shoulderL, shoulderR, torso } = this.rig;
+    hipL.rotation.x = swing * 0.65;
+    hipR.rotation.x = -swing * 0.65;
+    shoulderL.rotation.x = -swing * 0.55;
+    shoulderR.rotation.x = swing * 0.55;
+    // A small bob at each footfall, skipped when "Reduce motion" is on.
+    torso.position.y = this.options.bridge.view.reducedMotion ? 0 : Math.abs(Math.sin(this.walkPhase)) * 0.035 * this.walkAmount;
   }
 
   /** Tells React which room the astronaut is in and which machine is in reach, as the 2D game does. */
@@ -799,7 +887,9 @@ export class Station3D {
     };
     place(this.markers.objective, view.target);
     // Today's urgent sol job gets its own orange diamond, unless it is the same machine.
-    place(this.markers.urgent, view.urgent && view.urgent !== view.target ? view.urgent : null);
+    const urgentId = view.urgent && view.urgent !== view.target ? view.urgent : null;
+    place(this.markers.urgent, urgentId);
+    this.updateSpots(view.target, urgentId, still);
 
     // The outline sits on the tile under the astronaut's feet.
     const p = this.player.position;
@@ -819,6 +909,83 @@ export class Station3D {
       this.placeLabel(this.labels.prompt, item.x + 0.5, 0.35, item.y + 0.5);
     } else this.labels.prompt.style.display = 'none';
     this.placeLabel(this.labels.name, p.x, 1.35, p.z);
+  }
+
+  /** Beams, floor rings and labels for the task spots. */
+  private updateSpots(target: EquipmentId | null, urgent: EquipmentId | null, still: boolean): void {
+    const { view } = this.options.bridge;
+    const open = (id: EquipmentId | null) => {
+      const item = id ? EQUIPMENT.find((candidate) => candidate.id === id) : undefined;
+      return item && !view.lockedRooms.includes(item.room) ? item : undefined;
+    };
+    const pulse = still ? 1 : 1 + Math.sin(this.time * 4) * 0.12;
+    const flicker = still ? 0.75 : 0.62 + Math.sin(this.time * 2.5) * 0.13;
+    [open(target), open(urgent)].forEach((item, index) => {
+      const beam = this.spots.beams[index]!;
+      beam.visible = item !== undefined;
+      if (!item) return;
+      beam.position.set(item.x + 0.5, 0, item.y + 0.5);
+      (beam.material as THREE.MeshBasicMaterial).opacity = flicker;
+    });
+
+    // Rings: yellow next task, orange urgent job, red repair. Others have none.
+    const matrix = new THREE.Matrix4();
+    const color = new THREE.Color();
+    EQUIPMENT.forEach((item, index) => {
+      const locked = view.lockedRooms.includes(item.room);
+      const tone = locked ? null : item.id === target ? 0xffd23f : item.id === urgent ? 0xff7a1a : view.alerts.includes(item.id) ? 0xff4d5e : null;
+      this.spots.rings.setMatrixAt(index, tone === null ? matrix.makeScale(0, 0, 0) : matrix.makeScale(pulse, 1, pulse).setPosition(item.x + 0.5, 0.04, item.y + 0.5));
+      if (tone !== null) this.spots.rings.setColorAt(index, color.setHex(tone));
+    });
+    this.spots.rings.instanceMatrix.needsUpdate = true;
+    if (this.spots.rings.instanceColor) this.spots.rings.instanceColor.needsUpdate = true;
+
+    this.edgeLabel(this.labels.objective, open(target), 'NEXT TASK');
+    this.edgeLabel(this.labels.urgent, open(urgent), 'URGENT');
+  }
+
+  /**
+   * A label over a task spot. If the spot is off screen, the label sticks to
+   * the nearest screen edge with an arrow pointing toward it.
+   */
+  private edgeLabel(element: HTMLDivElement, item: { x: number; y: number; name: string } | undefined, title: string): void {
+    if (!item) {
+      element.style.display = 'none';
+      return;
+    }
+    const width = this.container.clientWidth;
+    const height = this.container.clientHeight;
+    const point = this.labelPoint.set(item.x + 0.5, 2.55, item.y + 0.5).project(this.camera);
+    let left = ((point.x + 1) / 2) * width;
+    let top = ((1 - point.y) / 2) * height;
+    const behind = point.z > 1;
+    if (behind) {
+      left = width - left;
+      top = height - top;
+    }
+    const margin = 70;
+    const inside = !behind && left > margin && left < width - margin && top > margin && top < height - margin;
+    element.style.display = 'block';
+    if (inside) {
+      element.textContent = `${title} · ${item.name}`;
+      element.style.transform = `translate(${left.toFixed(1)}px, ${top.toFixed(1)}px) translate(-50%, -100%)`;
+      return;
+    }
+    // Off screen: clamp to the edge and point an arrow at the spot.
+    const cx = width / 2;
+    const cy = height / 2;
+    const angle = Math.atan2(top - cy, left - cx);
+    const scale = Math.min((cx - margin) / Math.max(1, Math.abs(left - cx)), (cy - margin) / Math.max(1, Math.abs(top - cy)));
+    const ex = cx + (left - cx) * Math.min(1, scale);
+    const ey = cy + (top - cy) * Math.min(1, scale);
+    const arrows = ['→', '↘', '↓', '↙', '←', '↖', '↑', '↗'];
+    const arrow = arrows[(Math.round(angle / (Math.PI / 4)) + 8) % 8];
+    element.textContent = `${arrow} ${title} · ${item.name}`;
+    // Keep the whole label on screen, in the middle band: below the top panels and clear of the hotbar and tutorial.
+    const half = element.offsetWidth / 2;
+    const x = Math.min(Math.max(ex, half + 12), width - half - 12);
+    const y = Math.min(Math.max(ey, 190), Math.max(190, Math.min(height - 240, height * 0.55)));
+    element.style.transform = `translate(${x.toFixed(1)}px, ${y.toFixed(1)}px) translate(-50%, -50%)`;
   }
 
   /** Puts a page label over a point in the 3D world. */
@@ -863,6 +1030,8 @@ export class Station3D {
     this.renderer.domElement.remove();
     this.labels.name.remove();
     this.labels.prompt.remove();
+    this.labels.objective.remove();
+    this.labels.urgent.remove();
     this.vignette.remove();
   }
 }
