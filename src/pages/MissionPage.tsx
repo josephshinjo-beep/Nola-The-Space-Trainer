@@ -4,6 +4,7 @@ import { Link } from 'react-router';
 import { Button, buttonClasses } from '../components/Button';
 import { ConfirmDialog, Modal } from '../components/ConfirmDialog';
 import { pauseSpaceBackdrop } from '../components/space/SpaceBackdrop';
+import { nextStormEvent, useSpaceEvents } from '../data/spaceEvents';
 import { useSpaceWeather } from '../data/useSpaceWeather';
 import { useAcademyProgress } from '../features/academy/AcademyProgressContext';
 import { CURRICULUM } from '../features/academy/curriculum';
@@ -18,15 +19,18 @@ import { InteractButton, Joystick, MissionPanel, NolaCaption, ResourceStrip } fr
 import { StationMapModal } from '../game/hud/StationMapModal';
 import { EQUIPMENT, findEquipment, findRoom, ROOMS, type EquipmentId } from '../game/stationMap';
 import { SolBriefing, solHint } from '../game/sol/SolBriefing';
-import { urgentJob, type SolSave } from '../game/sol/solFlow';
+import { RadiationStormBanner, stormResultText } from '../game/sol/RadiationStormBanner';
+import { stormIsDue, urgentJob, type SolSave } from '../game/sol/solFlow';
 import { useSolMission } from '../game/sol/useSolMission';
 import { useSimulation } from '../game/useSimulation';
+import { SIM } from '../simulation/config';
 import { DEFAULT_INPUTS, machineStatus } from '../simulation/engine';
 import { SOL_CONFIG } from '../sol/config';
 import { currentMission } from '../simulation/missions';
 import type { RoomId, StationState } from '../simulation/types';
 
 const SOL_LENGTH = SOL_CONFIG.time.missionLengthSols.value;
+const STORM = SOL_CONFIG.storm;
 
 // Phaser is large, so it is downloaded only when the game is opened.
 const PhaserGame = lazy(() => import('../game/PhaserGame'));
@@ -90,6 +94,8 @@ function StationGame() {
   const { state, dispatch, setPaused } = sim;
   const solMission = useSolMission(user?.uid);
   const solSave = solMission.save;
+  const spaceEvents = useSpaceEvents();
+  const [stormMessage, setStormMessage] = useState<string | null>(null);
 
   // The game fills the screen, so the star background behind it can rest.
   useEffect(() => pauseSpaceBackdrop(), []);
@@ -124,6 +130,29 @@ function StationGame() {
   }, [bridge, viewKey]);
 
   const closePanel = useCallback(() => setOpenEquipment(null), []);
+
+  // Radiation storms from real NASA solar events: a warning every few sols
+  // during the day, once the Radiation Protection module is passed.
+  const stationMinutes = state?.minutes ?? null;
+  const radiationUnlocked = unlockedSystems.includes('radiation');
+  const { announceStorm, stormHits } = solMission;
+  useEffect(() => {
+    if (!solSave || stationMinutes === null || !spaceEvents || !radiationUnlocked) return;
+    if (!stormIsDue(solSave, STORM.everySols.value)) return;
+    const pick = nextStormEvent(spaceEvents, solSave.state.stormEventsUsed);
+    if (!pick) return;
+    setStormMessage(null);
+    announceStorm({ event: pick.event, severity: pick.event.severity, live: pick.live, arrivesAtStationMinute: stationMinutes + STORM.warningStationMinutes.value });
+  }, [solSave, stationMinutes, spaceEvents, radiationUnlocked, announceStorm]);
+
+  // The countdown runs on the station clock, so it stops when the game is paused.
+  const storm = solSave?.state.storm ?? null;
+  const stormMinutesLeft = storm && stationMinutes !== null ? Math.min(storm.arrivesAtStationMinute - stationMinutes, STORM.warningStationMinutes.value) : null;
+  useEffect(() => {
+    if (stormMinutesLeft === null || stormMinutesLeft > 0) return;
+    const hit = stormHits();
+    if (hit) setStormMessage(stormResultText(hit));
+  }, [stormMinutesLeft, stormHits]);
 
   // Opening the Command Console still counts for the "Find your feet" mission.
   useEffect(() => {
@@ -174,7 +203,7 @@ function StationGame() {
         <h1 className="sr-only">NOLA Mission: your space station</h1>
         <ResourceStrip state={state} />
 
-        <div className="flex items-start justify-between gap-2">
+        <div className="flex flex-wrap items-start justify-between gap-2 xl:flex-nowrap">
           <div className="flex flex-col gap-2">
             {solSave && (
               <section aria-label="Today's plan" className="pointer-events-auto w-64 max-w-[70vw] rounded-2xl border-2 border-nola bg-hull/90 p-3 backdrop-blur">
@@ -187,6 +216,29 @@ function StationGame() {
               </section>
             )}
             <MissionPanel state={state} />
+          </div>
+          {/* The storm warning: its own row at the top on smaller screens, in the middle on wide ones. */}
+          <div className="order-first flex w-full min-w-0 justify-center empty:hidden xl:order-none xl:w-auto xl:flex-1">
+            {solSave && storm && stormMinutesLeft !== null ? (
+              <RadiationStormBanner
+                state={solSave.state}
+                storm={storm}
+                stationMinutesLeft={stormMinutesLeft}
+                minutesPerRealSecond={SIM.minutesPerRealSecond}
+                onChoose={(choice) => {
+                  solMission.answerStorm(choice);
+                }}
+              />
+            ) : (
+              stormMessage && (
+                <p role="status" className="pointer-events-auto flex max-w-sm items-start gap-2 rounded-2xl border-2 border-nola bg-hull/95 p-3 text-sm font-semibold">
+                  <span className="flex-1">{stormMessage}</span>
+                  <button type="button" onClick={() => setStormMessage(null)} className="font-bold text-nola-soft underline">
+                    OK
+                  </button>
+                </p>
+              )
+            )}
           </div>
           <div className="flex flex-col gap-2">
             <button type="button" onClick={() => setMapOpen(true)} className="pointer-events-auto flex h-12 items-center gap-2 rounded-full border-2 border-line bg-hull/90 px-4 font-bold">

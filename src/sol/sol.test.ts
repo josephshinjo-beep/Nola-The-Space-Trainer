@@ -119,13 +119,13 @@ describe('making decisions', () => {
   it('spends oxygen for an extra research task, paying out only when the task succeeds', () => {
     let s = ok(choose(start(), 'extra-research-task'));
     expect(s.resources.oxygen).toBe(C.start.oxygen.value - 2);
-    expect(s.resources.research).toBe(0);
+    expect(s.resources.research).toBe(C.start.research.value);
     expect(s.plannedTasks).toEqual([{ taskId: 'extra-research', label: expect.any(String), decisionId: 'extra-research-task' }]);
     s = ok(endDecisionPhase(s));
     const won = ok(resolveActionPhase(s, { completed: ['extra-research'], failed: [] }));
-    expect(won.resources.research).toBe(4);
+    expect(won.resources.research).toBe(C.start.research.value + 4);
     const lost = ok(resolveActionPhase(s, { completed: [], failed: ['extra-research'] }));
-    expect(lost.resources.research).toBe(0);
+    expect(lost.resources.research).toBe(C.start.research.value);
     expect(lost.resources.oxygen).toBe(C.start.oxygen.value - 2);
     expect(lost.ledger.at(-1)).toMatchObject({ phase: 'action', label: expect.stringMatching(/failed/), note: expect.stringMatching(/reward was lost/) });
   });
@@ -242,7 +242,7 @@ describe('phases', () => {
     }
     expect(sols).toBe(C.time.missionLengthSols.value);
     expect(s.status).toBe('complete');
-    expect(s.resources.research).toBe(C.time.missionLengthSols.value * 2);
+    expect(s.resources.research).toBe(C.start.research.value + C.time.missionLengthSols.value * 2);
     expect(researchGoalMet(s)).toBe(true);
   });
 });

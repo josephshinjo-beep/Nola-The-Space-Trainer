@@ -1,6 +1,6 @@
 import { RESOURCES, type Resource } from '../../sol/config';
-import { choose, CLEAR_NIGHT, createSolState, decisionReport, endDecisionPhase, endSol, resolveActionPhase } from '../../sol/engine';
-import type { Amounts, NightConditions, Result, SolState } from '../../sol/types';
+import { choose, CLEAR_NIGHT, createSolState, decisionReport, endDecisionPhase, endSol, resolveActionPhase, respondToStorm, startRadiationStorm, stormArrives, type StormStart } from '../../sol/engine';
+import type { Amounts, NightConditions, RadiationStorm, Result, SolState, StormChoice } from '../../sol/types';
 import { findCard, type KidCard } from './cards';
 
 /**
@@ -59,6 +59,35 @@ export function completeJob(save: SolSave, taskId: string): SolSave {
   return { ...save, doneTasks: [...save.doneTasks, taskId] };
 }
 
+// ---------------------------------------------------------------- radiation storms
+
+/** A storm warning, from a real solar event. */
+export function announceStorm(save: SolSave, start: StormStart): Result<SolSave> {
+  const next = startRadiationStorm(save.state, start);
+  return next.ok ? { ok: true, state: { ...save, state: next.state } } : next;
+}
+
+/** The crew's answer to the storm warning. */
+export function answerStorm(save: SolSave, choice: StormChoice): Result<SolSave> {
+  const next = respondToStorm(save.state, choice);
+  return next.ok ? { ok: true, state: { ...save, state: next.state } } : next;
+}
+
+/** The countdown ended: the storm arrives. Returns the storm that hit, for the message. */
+export function stormHits(save: SolSave): Result<SolSave> & { storm?: RadiationStorm } {
+  const storm = save.state.storm;
+  const next = stormArrives(save.state);
+  if (!next.ok) return next;
+  return { ok: true, state: { ...save, state: next.state }, ...(storm ? { storm } : {}) };
+}
+
+/** Should a new storm warning start now? Every few sols, during the day, once per sol. */
+export function stormIsDue(save: SolSave, everySols: number): boolean {
+  const s = save.state;
+  if (s.status !== 'active' || s.phase !== 'action' || s.storm || s.sol % everySols !== 0) return false;
+  return !s.ledger.some((entry) => entry.sol === s.sol && entry.source.startsWith('storm:') && entry.label === 'Radiation storm warning');
+}
+
 /** What a sol did, in a form the summary screen can word for children. */
 export interface SolSummary {
   sol: number;
@@ -82,6 +111,12 @@ const KID_EVENTS: Record<string, string> = {
   'system:action-injuries': 'Someone got hurt during the day.',
 };
 
+const KID_STORM_EVENTS: Record<string, string> = {
+  'Storm hits the reinforced shield': 'A radiation storm hit, but the stronger shield protected the crew.',
+  'Storm passes while the crew shelters': 'A radiation storm passed while the crew stayed safe in the shelter.',
+  'Storm hits an unprotected crew': 'A radiation storm hit and the crew was not protected.',
+};
+
 /** Evening: end the sol. The urgent job counts as failed if it was not done. */
 export function finishSol(save: SolSave, conditions: NightConditions = CLEAR_NIGHT): Result<SolSave> & { summary?: SolSummary } {
   const before = save.state;
@@ -100,7 +135,7 @@ export function finishSol(save: SolSave, conditions: NightConditions = CLEAR_NIG
     if (delta !== 0) change[resource as Resource] = delta;
   }
   const report = job ? decisionReport(after, job.card.decisionId, before.sol) : { gave: {}, cost: {} };
-  const events = [...new Set(solEntries.map((entry) => KID_EVENTS[entry.source]).filter((text): text is string => Boolean(text)))];
+  const events = [...new Set(solEntries.map((entry) => (entry.source.startsWith('storm:') ? KID_STORM_EVENTS[entry.label] : KID_EVENTS[entry.source])).filter((text): text is string => Boolean(text)))];
   const summary: SolSummary = {
     sol: before.sol,
     card: job?.card ?? null,
@@ -126,6 +161,25 @@ export function reviveSolSave(raw: unknown): SolSave | null {
   return {
     version: 1,
     doneTasks: save.doneTasks.filter((id): id is string => typeof id === 'string'),
-    state: { ...(state as SolState), tonight: { ...state.tonight, deferred: state.tonight.deferred ?? [] } },
+    state: {
+      ...(state as SolState),
+      tonight: { ...state.tonight, deferred: state.tonight.deferred ?? [] },
+      // Saves from before radiation storms existed have neither field.
+      storm: isStorm(state.storm) ? state.storm : null,
+      stormEventsUsed: Array.isArray(state.stormEventsUsed) ? state.stormEventsUsed.filter((id): id is string => typeof id === 'string') : [],
+    },
   };
+}
+
+function isStorm(value: unknown): value is RadiationStorm {
+  if (typeof value !== 'object' || value === null) return false;
+  const storm = value as Partial<RadiationStorm>;
+  return (
+    typeof storm.event?.id === 'string' &&
+    typeof storm.event.time === 'string' &&
+    ['FLR', 'CME', 'SEP'].includes(storm.event.type as string) &&
+    [1, 2, 3].includes(storm.severity as number) &&
+    typeof storm.arrivesAtStationMinute === 'number' &&
+    (storm.choice === null || storm.choice === 'reinforce' || storm.choice === 'shelter')
+  );
 }

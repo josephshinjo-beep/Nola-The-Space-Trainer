@@ -87,7 +87,7 @@ Vercel hosts the website and runs the two small server functions in `api/`.
 | `GEMINI_API_KEY` | AI chat (alternative) | Secret, from [Google AI Studio](https://aistudio.google.com/apikey). Used only when no OpenRouter key is set |
 | `AI_MODEL` | AI chat (optional) | A Gemini model name to try first when using Gemini |
 | `VITE_SPACE_DATA_SOURCE` | Real NASA data (optional) | Set to `nasa` to use NASA data; leave unset for simulated data |
-| `NASA_API_KEY` | Real NASA data (optional) | Free from [api.nasa.gov](https://api.nasa.gov). Without it NASA's low-limit `DEMO_KEY` is used |
+| `NASA_API_KEY` | Real NASA data (optional) | Secret. Free from [api.nasa.gov](https://api.nasa.gov). Radiation storms try api.nasa.gov first with it, and work without it through NASA's keyless DONKI web service. The space-weather summary uses NASA's low-limit `DEMO_KEY` without it |
 
 3. Deploy.
 4. In **Firebase console → Authentication → Settings → Authorized domains**, add your Vercel domain.
@@ -139,6 +139,7 @@ After changing a variable in Vercel you must **redeploy**: existing deployments 
 ```
 api/
 ├── chat.ts            AI backend for Ask NOLA (server only)
+├── space-events.ts    Real solar events from NASA DONKI for radiation storms (server only)
 └── space-weather.ts   NASA DONKI fetch and conversion (server only)
 src/
 ├── app/               Route map, page frame, route guards
@@ -180,9 +181,9 @@ Achievements are worked out from these records each time, not stored separately,
 - **The station game** copies how real systems depend on each other, but its numbers are game values, resources are shown as percentages, and time is sped up (a station day takes about 12 minutes). Machine panels label each note **Real science** or **Game simplification**. "Radiation level" is a game variable, not a real unit.
 - **Space weather** shown in the game is labelled with its source. Simulated data always says "Simulated data (not real measurements)".
 
-## Sol engine (in development, no UI yet)
+## Sol engine
 
-`src/sol/` is a separate, turn-based game-state engine for a future version of the mission game. It is not connected to any screen yet.
+`src/sol/` is a turn-based game-state engine with no screen code. The station game uses it for the daily plan (decision cards at the Command Console, urgent jobs at machines) and for radiation storms.
 
 - **Seven resources:** oxygen (kg), water (kg), food (kg), power (kWh), shielding (%), crew health (%) and research points.
 - **Each sol has three phases:** a decision phase (up to 2 decisions), an action phase played in the 3D game (which reports which tasks succeeded), and an automatic night (power, life support, food, radiation, recovery).
@@ -191,6 +192,30 @@ Achievements are worked out from these records each time, not stored separately,
 - **One config file.** Every number is in `src/sol/config.ts`, labelled `NASA_BASED` (with its source, for example oxygen use from NASA's BVAD or the surface dose measured by Curiosity) or `SIMPLIFIED` (a game value).
 
 Run its tests with `npx vitest run src/sol`.
+
+## Radiation storms from real solar events
+
+Every third sol (once the Radiation Protection module is passed) a **Radiation Storm** warning appears during the day, based on a **real** solar event from NASA's DONKI database. The banner shows the event's real date and type ("Based on a real solar event from 17 October 2026: a coronal mass ejection…"), whether it came from live or saved NASA data, a link to the event on NASA's site, and the label "Game mechanic, not a radiation forecast". A countdown runs on the station clock (about 2 real minutes, paused with the game). The player chooses:
+
+- **Reinforce shielding:** costs power and water (water is a good radiation shield). The crew still takes a little harm.
+- **Shelter the crew:** costs research time. The crew is safe.
+- **Do nothing:** the crew loses health when the storm arrives.
+
+Costs and harm grow with the storm's severity. All the numbers are in `SOL_CONFIG.storm` and labelled as game values. Each real event is used only once; the strongest unused event is picked first.
+
+**Where the events come from.** `api/space-events.ts` fetches solar flares (`FLR`), coronal mass ejections (`CME`) and solar energetic particle events (`SEP`) for the last 30 days, checked against DONKI's [OpenAPI document](https://ccmc.gsfc.nasa.gov/DONKI/api/openapi/):
+
+1. `https://api.nasa.gov/DONKI/{FLR,CME,SEP}?startDate=…&endDate=…&api_key=…`, if `NASA_API_KEY` is set (the key never leaves the server);
+2. `https://ccmc.gsfc.nasa.gov/DONKI-API/get/{FLR,CME,SEP}?startDate=…&endDate=…` (DONKI-API 2.0, NASA's official web service, no key; CMEs with `mostAccurateOnly=true`);
+3. the last good answer in the server's memory (fresh for 30 minutes, used for up to 24 hours if NASA is down). Vercel's CDN also caches the answer for 30 minutes.
+
+If all of that fails, the app uses `src/data/spaceEventsArchive.ts`: 84 real past events (September 2017, May 2024, October 2024) recorded from DONKI and kept in `src/data/__fixtures__/donki/`. A test checks the archive matches those recordings exactly, so the game always has real events, even offline.
+
+**Which events count (game rules, in `EVENT_RULES`):** flares of class M5 and above (X1+ severe, X10+ extreme, following the NOAA R scale); CMEs DONKI types as O, R or ER (1,000 km/s and faster), using the analysis DONKI marks as most accurate; every SEP event (extreme). Entries that cannot be read are skipped, never guessed.
+
+**Status:** the DONKI-API 2.0 path was checked live (real events arrived in the game). The api.nasa.gov path is covered by tests but was not run live, because no NASA key was available while building; NASA's shared `DEMO_KEY` was rate-limited.
+
+The station game's own random storms (from the space-weather summary) still exist separately for now.
 
 ## NASA data
 
@@ -262,6 +287,7 @@ If this goes beyond a hackathon demo to real children, get proper advice on chil
 - All eight lessons' content (well-formed, exactly one right answer per question, every slider activity starts unsolved and can be solved).
 - The knowledge search and NOLA's built-in replies, including the personal-information guard.
 - Space data validation, the NOAA scale thresholds, the NASA conversion and the fallback to simulated data.
+- The DONKI events route on real recorded NASA data (which events count, host order with and without a key, caching, the 502 answer), the offline archive, and the radiation storm rules (costs, harm, one storm at a time, old saves).
 - The AI backend's request checks and sign-in check.
 - The station map (every machine reachable, locked doors block).
 

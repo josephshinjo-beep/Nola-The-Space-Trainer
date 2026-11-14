@@ -1,6 +1,6 @@
 import { RESOURCES, SOL_CONFIG as C, type Param, type Resource } from './config';
 import { DECISIONS, findDecision, validateDecision } from './decisions';
-import type { ActionReport, Amounts, Decision, LedgerEntry, NightConditions, Phase, Result, SolState } from './types';
+import type { ActionReport, Amounts, Decision, LedgerEntry, NightConditions, Phase, RadiationStorm, Result, SolState, StormChoice } from './types';
 
 /**
  * The sol engine: the rules of a sol-based survival mission, with no screen code.
@@ -34,6 +34,8 @@ function copy(state: SolState): SolState {
     plannedTasks: [...state.plannedTasks],
     tonight: { ...state.tonight, deferred: [...state.tonight.deferred] },
     ledger: [...state.ledger],
+    storm: state.storm ? { ...state.storm, event: { ...state.storm.event } } : null,
+    stormEventsUsed: [...state.stormEventsUsed],
   };
 }
 
@@ -91,6 +93,8 @@ export function createSolState(): SolState {
     plannedTasks: [],
     tonight: { heatingLow: false, greenhouseOff: false, deferred: [] },
     ledger: [],
+    storm: null,
+    stormEventsUsed: [],
   };
 }
 
@@ -207,6 +211,8 @@ export function endSol(state: SolState, conditions: NightConditions = CLEAR_NIGH
   if (!(conditions.radiation >= 0) || !Number.isFinite(conditions.radiation)) return { ok: false, reason: 'Radiation must be zero or more.' };
 
   const next = copy(state);
+  // A storm still on its way arrives tonight.
+  if (next.storm) applyStormArrival(next);
   const P = C.power;
   const crew = C.crew.size.value;
   let penalised = false;
@@ -300,6 +306,92 @@ export function endSol(state: SolState, conditions: NightConditions = CLEAR_NIGH
     next.sol += 1;
     next.phase = 'decision';
   }
+  return { ok: true, state: next };
+}
+
+// ---------------------------------------------------------------- radiation storms
+
+/**
+ * Radiation storms are based on real solar events from NASA DONKI. The
+ * event is real; what the game does with it is a game mechanic, not a
+ * radiation forecast. The crew can reinforce the shield (power and water)
+ * or shelter (research time). Doing nothing costs crew health.
+ */
+
+export interface StormStart {
+  event: RadiationStorm['event'];
+  severity: 1 | 2 | 3;
+  live: boolean;
+  /** The station-clock minute when the storm arrives. */
+  arrivesAtStationMinute: number;
+}
+
+/** Announces a radiation storm. Only one at a time, and each real event is used only once. */
+export function startRadiationStorm(state: SolState, start: StormStart): Result<SolState> {
+  if (state.status !== 'active') return { ok: false, reason: 'The mission is over.' };
+  if (state.storm) return { ok: false, reason: 'A radiation storm is already on its way.' };
+  if (state.stormEventsUsed.includes(start.event.id)) return { ok: false, reason: 'That solar event has already been used for a storm.' };
+  if (![1, 2, 3].includes(start.severity)) return { ok: false, reason: 'Storm severity must be 1, 2 or 3.' };
+  if (!Number.isFinite(start.arrivesAtStationMinute)) return { ok: false, reason: 'The storm needs an arrival time.' };
+  const next = copy(state);
+  next.storm = { event: { ...start.event }, live: start.live, severity: start.severity, announcedSol: state.sol, arrivesAtStationMinute: start.arrivesAtStationMinute, choice: null };
+  next.stormEventsUsed.push(start.event.id);
+  record(next, state.phase, `storm:${start.event.id}`, 'Radiation storm warning', {}, {}, `Based on a real solar event (${start.event.type}, ${start.event.time.slice(0, 10)}). Game mechanic, not a radiation forecast.`);
+  return { ok: true, state: next };
+}
+
+/** What a storm choice costs, given the storm's severity. */
+export function stormChoiceCost(choice: StormChoice, severity: number): Amounts {
+  const S = C.storm;
+  return choice === 'reinforce'
+    ? { power: S.reinforcePowerPerSeverity.value * severity, water: S.reinforceWaterPerSeverity.value * severity }
+    : { research: S.shelterResearchPerSeverity.value * severity };
+}
+
+/** Crew health the storm takes, given the crew's choice (null = no choice). */
+export function stormHarm(choice: StormChoice | null, severity: number): number {
+  const S = C.storm;
+  const perSeverity = choice === 'reinforce' ? S.harmReinforcedPerSeverity : choice === 'shelter' ? S.harmShelteredPerSeverity : S.harmUnprotectedPerSeverity;
+  return perSeverity.value * severity;
+}
+
+/** Why a storm choice cannot be made right now, or null if it can. */
+export function whyNotStormChoice(state: SolState, choice: StormChoice): string | null {
+  if (state.status !== 'active') return 'The mission is over.';
+  if (!state.storm) return 'There is no radiation storm on its way.';
+  if (state.storm.choice) return 'The crew has already chosen how to face this storm.';
+  for (const [resource, amount] of Object.entries(stormChoiceCost(choice, state.storm.severity)) as [Resource, number][]) {
+    if (state.resources[resource] < amount) return `Not enough ${resource}: it needs ${amount} and there is ${state.resources[resource]}.`;
+  }
+  return null;
+}
+
+/** The crew's answer to the storm. All-or-nothing, like a decision. */
+export function respondToStorm(state: SolState, choice: StormChoice): Result<SolState> {
+  const reason = whyNotStormChoice(state, choice);
+  if (reason) return { ok: false, reason };
+  const next = copy(state);
+  const storm = next.storm!;
+  storm.choice = choice;
+  record(next, next.phase, `storm:${storm.event.id}`, choice === 'reinforce' ? 'Reinforce the shielding for the storm' : 'Shelter the crew from the storm', {}, stormChoiceCost(choice, storm.severity));
+  return { ok: true, state: next };
+}
+
+function applyStormArrival(state: SolState): void {
+  const storm = state.storm!;
+  const harm = stormHarm(storm.choice, storm.severity);
+  const label = storm.choice === 'reinforce' ? 'Storm hits the reinforced shield' : storm.choice === 'shelter' ? 'Storm passes while the crew shelters' : 'Storm hits an unprotected crew';
+  record(state, state.phase, `storm:${storm.event.id}`, label, {}, { crewHealth: harm }, harm === 0 ? 'The crew was safe.' : undefined);
+  state.storm = null;
+  if (state.resources.crewHealth <= 0) state.status = 'failed';
+}
+
+/** The storm arrives now (when the countdown ends). If it is still pending at night, `endSol` brings it instead. */
+export function stormArrives(state: SolState): Result<SolState> {
+  if (state.status !== 'active') return { ok: false, reason: 'The mission is over.' };
+  if (!state.storm) return { ok: false, reason: 'There is no radiation storm on its way.' };
+  const next = copy(state);
+  applyStormArrival(next);
   return { ok: true, state: next };
 }
 

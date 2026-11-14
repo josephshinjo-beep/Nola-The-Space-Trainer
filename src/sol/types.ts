@@ -58,6 +58,10 @@ export interface SolState {
   /** Night effects set by today's decisions. */
   tonight: { heatingLow: boolean; greenhouseOff: boolean; deferred: { decisionId: string; label: string; costs: Amounts }[] };
   ledger: LedgerEntry[];
+  /** The radiation storm on its way, if any. */
+  storm: RadiationStorm | null;
+  /** Ids of real events already used for storms, so none repeats. */
+  stormEventsUsed: string[];
 }
 
 /** What the 3D action phase reports back. */
@@ -74,6 +78,20 @@ export interface NightConditions {
   sunlight: number;
   /** Multiplier on the surface radiation dose (1 = normal, 20 or more = solar particle event). */
   radiation: number;
+}
+
+export type StormChoice = 'reinforce' | 'shelter';
+
+/** A radiation storm based on a real solar event from NASA DONKI. */
+export interface RadiationStorm {
+  event: { id: string; type: 'FLR' | 'CME' | 'SEP'; time: string; detail: string; link: string | null };
+  /** True when the event came from live NASA data, false for the bundled archive. */
+  live: boolean;
+  severity: 1 | 2 | 3;
+  announcedSol: number;
+  /** The station-clock minute when the storm arrives (set by the game, for the countdown). */
+  arrivesAtStationMinute: number;
+  choice: StormChoice | null;
 }
 
 export type Result<T> = { ok: true; state: T } | { ok: false; reason: string };

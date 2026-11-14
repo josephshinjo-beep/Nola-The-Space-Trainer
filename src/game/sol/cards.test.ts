@@ -127,7 +127,7 @@ describe('the sol flow', () => {
     const save = ok(planSol(newSolSave(), 'extra-research-task'));
     const result = finishSol(save);
     expect(result.summary).toMatchObject({ jobDone: false, cardGave: {}, cardCost: { oxygen: 2 } });
-    expect(ok(result).state.resources.research).toBe(0);
+    expect(ok(result).state.resources.research).toBe(SOL_CONFIG.start.research.value);
   });
 
   it('a night cost shows up in the summary of the plan that caused it', () => {

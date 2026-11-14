@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { deleteSolMission, loadSolMission, saveSolMission } from '../../services/simulationRepository';
-import type { Result } from '../../sol/types';
-import { completeJob, finishSol, newSolSave, planSol, skipPlanning, type SolSave, type SolSummary } from './solFlow';
+import type { StormStart } from '../../sol/engine';
+import type { RadiationStorm, Result, StormChoice } from '../../sol/types';
+import { announceStorm, answerStorm, completeJob, finishSol, newSolSave, planSol, skipPlanning, stormHits, type SolSave, type SolSummary } from './solFlow';
 
 export interface SolMission {
   /** Null while loading. */
@@ -12,6 +13,10 @@ export interface SolMission {
   completeJob: (taskId: string) => void;
   finish: () => SolSummary | null;
   restart: () => Promise<void>;
+  announceStorm: (start: StormStart) => void;
+  answerStorm: (choice: StormChoice) => Result<SolSave>;
+  /** The storm arrives now. Returns the storm that hit, or null. */
+  stormHits: () => RadiationStorm | null;
 }
 
 /**
@@ -90,5 +95,32 @@ export function useSolMission(uid: string | undefined): SolMission {
     if (uid) await deleteSolMission(uid);
   }, [uid]);
 
-  return { save, loadError, plan, skip, completeJob: complete, finish, restart };
+  const announce = useCallback(
+    (start: StormStart) => {
+      if (!current.current) return;
+      const result = announceStorm(current.current, start);
+      if (result.ok) commit(result.state);
+    },
+    [commit],
+  );
+
+  const answer = useCallback(
+    (choice: StormChoice): Result<SolSave> => {
+      if (!current.current) return { ok: false, reason: 'Still loading.' };
+      const result = answerStorm(current.current, choice);
+      if (result.ok) commit(result.state);
+      return result;
+    },
+    [commit],
+  );
+
+  const hits = useCallback((): RadiationStorm | null => {
+    if (!current.current) return null;
+    const result = stormHits(current.current);
+    if (!result.ok) return null;
+    commit(result.state);
+    return result.storm ?? null;
+  }, [commit]);
+
+  return { save, loadError, plan, skip, completeJob: complete, finish, restart, announceStorm: announce, answerStorm: answer, stormHits: hits };
 }

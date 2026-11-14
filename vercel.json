@@ -11,6 +11,9 @@
     },
     "api/space-weather.ts": {
       "maxDuration": 20
+    },
+    "api/space-events.ts": {
+      "maxDuration": 20
     }
   }
 }

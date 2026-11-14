@@ -55,7 +55,7 @@ export const SOL_CONFIG = {
     power: simple(100, 'kWh', 'Energy stored in the batteries at the start.'),
     shielding: simple(70, '%', 'Radiation shielding integrity at the start (a game percentage, not a physical unit).'),
     crewHealth: simple(90, '%', 'Overall crew condition at the start (a game percentage).'),
-    research: simple(0, 'points', 'Research points at the start.'),
+    research: simple(10, 'points', 'Research points at the start: results already gathered on the journey, so the crew has research time it can give up to shelter from a radiation storm.'),
   },
 
   capacity: {
@@ -121,6 +121,22 @@ export const SOL_CONFIG = {
 
   goal: {
     researchTarget: simple(40, 'points', 'Research needed for the mission to count as a scientific success.'),
+  },
+
+  /**
+   * Radiation storms based on real solar events from NASA DONKI. The event
+   * is real; everything the game does with it is a game mechanic, not a
+   * radiation forecast. Amounts are multiplied by the storm's severity (1-3).
+   */
+  storm: {
+    everySols: simple(3, 'sols', 'A radiation storm warning comes every third sol, once the Radiation Protection module is passed.'),
+    warningStationMinutes: simple(240, 'station minutes', 'Time between the warning and the storm arriving: 4 station hours, about 2 real minutes of play.'),
+    reinforcePowerPerSeverity: simple(8, 'kWh', 'Power to strengthen the shield before the storm, per level of severity.'),
+    reinforceWaterPerSeverity: simple(10, 'kg', 'Water pumped into the shield walls, per level of severity. Real fact for context: water is a good radiation shield, and NASA studies water walls for spacecraft.'),
+    shelterResearchPerSeverity: simple(3, 'points', 'Research time lost while the crew waits in the shelter, per level of severity.'),
+    harmUnprotectedPerSeverity: simple(8, '%', 'Crew health lost to the storm if the crew does nothing, per level of severity.'),
+    harmReinforcedPerSeverity: simple(2, '%', 'Crew health lost to the storm behind a reinforced shield, per level of severity.'),
+    harmShelteredPerSeverity: simple(0, '%', 'Crew health lost to the storm inside the shelter. Real fact for context: astronauts on the ISS shelter in its best-shielded modules during solar storms.'),
   },
 } as const;
 
