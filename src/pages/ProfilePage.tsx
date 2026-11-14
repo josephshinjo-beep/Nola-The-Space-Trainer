@@ -9,10 +9,11 @@ import { AstronautAvatar } from '../features/profile/AstronautAvatar';
 import { AvatarEditor } from '../features/profile/AvatarEditor';
 import { DEFAULT_AVATAR } from '../features/profile/avatarOptions';
 import { AchievementsPanel, LearningHistoryPanel } from '../features/profile/ProgressPanels';
+import { RankPanel } from '../game/progress/RankPanel';
 import type { StationStats } from '../features/academy/achievements';
 import { useAcademyProgress } from '../features/academy/AcademyProgressContext';
 import { getStationStats } from '../simulation/engine';
-import { deleteSimulation, deleteSolMission, loadSimulation } from '../services/simulationRepository';
+import { deleteSimulation, deleteSolMission, loadSimulation, deleteMissionRecord } from '../services/simulationRepository';
 import { updateDisplayName } from '../services/userRepository';
 
 type Confirming = 'course' | 'station' | null;
@@ -65,7 +66,8 @@ export function ProfilePage() {
       await Promise.all([deleteSimulation(uid), deleteSolMission(uid)]);
       setStation(null);
       setHasSave(false);
-      if (what === 'course') await resetCourse();
+      // A fresh course also clears ranks and badges; restarting only the station keeps them.
+      if (what === 'course') await Promise.all([resetCourse(), deleteMissionRecord(uid)]);
       setResetMessage(what === 'course' ? 'Your course and station have been reset. A fresh start!' : 'Your station has been reset. Your lessons are untouched.');
     } catch (error) {
       console.error('Reset failed', error);
@@ -163,6 +165,10 @@ export function ProfilePage() {
             </>
           )}
         </p>
+      </Panel>
+
+      <Panel title="Rank and concept badges">
+        <RankPanel uid={uid} station={station} />
       </Panel>
 
       <Panel title="Achievements">

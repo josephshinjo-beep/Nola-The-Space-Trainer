@@ -15,6 +15,9 @@ export interface StationStats {
   stormsSheltered: number;
   harvests: number;
   repairs: number;
+  /** Problems fixed with Mission Control's reply, and on the crew's own training. */
+  askedEarthFixes?: number;
+  trainingFixes?: number;
 }
 
 export interface Achievement {

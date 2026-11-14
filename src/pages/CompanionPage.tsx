@@ -1,6 +1,6 @@
 import { BookOpen, CircleCheck, Send, ShieldCheck, TriangleAlert } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { Link } from 'react-router';
+import { Link, useSearchParams } from 'react-router';
 import { Button } from '../components/Button';
 import { ReadAloudButton } from '../features/accessibility/ReadAloudButton';
 import { useAcademyProgress } from '../features/academy/AcademyProgressContext';
@@ -28,7 +28,9 @@ export function CompanionPage() {
   const { user } = useAuth();
   const { progress } = useAcademyProgress();
   const [messages, setMessages] = useState<Message[]>([{ id: 0, from: 'nola', reply: WELCOME }]);
-  const [draft, setDraft] = useState('');
+  const [searchParams] = useSearchParams();
+  // A question passed from elsewhere in the app (for example a resource explainer) is filled in, ready to send.
+  const [draft, setDraft] = useState(() => (searchParams.get('ask') ?? '').slice(0, MAX_LENGTH));
   const [thinking, setThinking] = useState(false);
   const [aiStatus, setAiStatus] = useState<AiStatus>(getAiStatus);
   // NOLA's notes, loaded once. Kept as a promise so a question asked straight

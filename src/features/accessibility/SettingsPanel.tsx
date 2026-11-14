@@ -89,6 +89,12 @@ export function SettingsPanel() {
           onChange={(reduceMotion) => update({ reduceMotion })}
         />
         <Toggle
+          label="Colour-blind friendly colours"
+          hint="Shows good and bad as blue and amber instead of green and red. Icons and words always show it too."
+          checked={settings.colorSafe}
+          onChange={(colorSafe) => update({ colorSafe })}
+        />
+        <Toggle
           label="Read aloud"
           hint="Adds a Listen button to NOLA's speech bubbles."
           checked={settings.readAloud}

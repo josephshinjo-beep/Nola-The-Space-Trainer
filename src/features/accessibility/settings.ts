@@ -11,6 +11,8 @@ export interface AccessibilitySettings {
   highContrast: boolean;
   dyslexiaFont: boolean;
   reduceMotion: boolean;
+  /** Blue and amber instead of green and red, for colour-blind players. */
+  colorSafe: boolean;
   /** Show "Listen" buttons that read NOLA's words aloud. */
   readAloud: boolean;
   speechRate: SpeechRate;
@@ -23,6 +25,7 @@ export const DEFAULT_SETTINGS: AccessibilitySettings = {
   highContrast: false,
   dyslexiaFont: false,
   reduceMotion: false,
+  colorSafe: false,
   readAloud: true,
   speechRate: 'normal',
   voiceVolume: 1,
@@ -43,6 +46,7 @@ export function sanitizeSettings(raw: unknown): AccessibilitySettings {
     highContrast: bool(data.highContrast, d.highContrast),
     dyslexiaFont: bool(data.dyslexiaFont, d.dyslexiaFont),
     reduceMotion: bool(data.reduceMotion, d.reduceMotion),
+    colorSafe: bool(data.colorSafe, d.colorSafe),
     readAloud: bool(data.readAloud, d.readAloud),
     speechRate: SPEECH_RATES.includes(data.speechRate as SpeechRate) ? (data.speechRate as SpeechRate) : d.speechRate,
     voiceVolume: Math.min(1, Math.max(0, volume)),
@@ -76,4 +80,5 @@ export function applySettingsToDocument(settings: AccessibilitySettings): void {
   root.dataset.contrast = settings.highContrast ? 'high' : 'normal';
   root.dataset.font = settings.dyslexiaFont ? 'dyslexia' : 'default';
   root.dataset.motion = settings.reduceMotion ? 'reduced' : 'full';
+  root.dataset.palette = settings.colorSafe ? 'safe' : 'default';
 }

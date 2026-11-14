@@ -1,4 +1,4 @@
-import { Check, CircleAlert, Minus, Moon, Plus, Sparkles } from 'lucide-react';
+import { ArrowDown, ArrowUp, Check, CircleAlert, Minus, Moon, Plus, Sparkles } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '../../components/Button';
 import { Modal } from '../../components/ConfirmDialog';
@@ -7,6 +7,11 @@ import { NolaMascot } from '../../features/companion/NolaMascot';
 import type { SystemId } from '../../features/unlocks/unlockManager';
 import { SOL_CONFIG, type Resource } from '../../sol/config';
 import type { Amounts, BodyPart } from '../../sol/types';
+import { MissionDebrief } from '../progress/MissionDebrief';
+import { amountWords, type BadgeStatus, type Rank } from '../progress/record';
+import { ExplainButton } from './ResourceExplainer';
+import { TutorialCoach } from './TutorialCoach';
+import { SUMMARY_STEP, type TutorialStep } from './tutorial';
 import { LINE_LABELS, pickCards, urgentPlace, type CardLine, type KidCard } from './cards';
 import { pickFinding, useAstronautScience } from '../../data/astronautScience';
 import { AstronautScienceCard } from '../../features/science/AstronautScienceCard';
@@ -19,6 +24,10 @@ interface SolBriefingProps {
   onSkip: () => void;
   onFinish: () => SolSummary | null;
   onClose: () => void;
+  /** The tutorial step to show inside the console, during the tutorial sol. */
+  tutorial?: TutorialStep | null;
+  /** Rank and badges for the end-of-mission debrief. */
+  debrief?: { rank: Rank; badges: BadgeStatus[] };
 }
 
 function Line({ line, kind }: { line: CardLine; kind: 'gain' | 'lose' }) {
@@ -30,6 +39,7 @@ function Line({ line, kind }: { line: CardLine; kind: 'gain' | 'lose' }) {
       </span>
       <span className="min-w-0">
         <strong className="font-display">{name}</strong>
+        <ExplainButton resource={line.resource} className="ml-1 align-middle" />
         {line.tonight && (
           <span className="ml-2 inline-flex items-center gap-1 rounded-full bg-panel px-2 py-0.5 text-xs font-bold text-nola-soft">
             <Moon aria-hidden="true" size={12} /> Tonight
@@ -84,6 +94,19 @@ function Card({ card, onChoose }: { card: KidCard; onChoose: () => void }) {
   );
 }
 
+/** "You gave up 2 science points and 3 kWh of power to get more muscles & bones." */
+function summaryTradeOff(summary: SolSummary): string | null {
+  if (!summary.card) return null;
+  const gave = (Object.entries(summary.cardCost) as [Resource, number][]).map(([resource, amount]) => amountWords(resource, amount));
+  const got = [...Object.keys(summary.cardGave), ...Object.keys(summary.bodyGave)].map((key) => LINE_LABELS[key as Resource].name.toLowerCase());
+  if (gave.length === 0) return null;
+  const join = (items: string[]) => (items.length <= 1 ? (items[0] ?? '') : `${items.slice(0, -1).join(', ')} and ${items.at(-1)}`);
+  return got.length > 0 ? `You gave up ${join(gave)} to get more ${join(got)}.` : `You gave up ${join(gave)}, but the urgent job was not done, so nothing came back.`;
+}
+
+/** "Power went down by 12" for the Listen button. */
+const changeWords = (resource: Resource, delta: number) => `${LINE_LABELS[resource].name} went ${delta > 0 ? 'up' : 'down'} by ${Math.abs(Math.round(delta * 10) / 10)}`;
+
 /** "Air, Shield" style list of the resources in an amount. */
 const names = (amounts: Amounts | Partial<Record<BodyPart, number>>) =>
   (Object.keys(amounts) as (Resource | BodyPart)[]).map((resource) => {
@@ -100,9 +123,16 @@ const names = (amounts: Amounts | Partial<Record<BodyPart, number>>) =>
  * after choosing it explains why the choice is real; during the day it
  * shows the urgent job; in the evening it ends the sol and sums it up.
  */
-export function SolBriefing({ save, unlocked, onPlan, onSkip, onFinish, onClose }: SolBriefingProps) {
+export function SolBriefing({ save, unlocked, onPlan, onSkip, onFinish, onClose, tutorial, debrief }: SolBriefingProps) {
   const [chosen, setChosen] = useState<KidCard | null>(null);
   const [summary, setSummary] = useState<SolSummary | null>(null);
+  const [showDebrief, setShowDebrief] = useState(false);
+  // Remember whether this was the tutorial sol before ending it (ending it finishes the tutorial).
+  const [tutorialSummary, setTutorialSummary] = useState(false);
+  const finish = () => {
+    setTutorialSummary(tutorial !== null && tutorial !== undefined);
+    setSummary(onFinish());
+  };
   const science = useAstronautScience();
   const [confirmEnd, setConfirmEnd] = useState(false);
   const { state } = save;
@@ -112,14 +142,26 @@ export function SolBriefing({ save, unlocked, onPlan, onSkip, onFinish, onClose 
   let title: string;
   let body: React.ReactNode;
 
-  if (summary) {
+  if (summary && showDebrief && state.status !== 'active') {
+    title = 'Mission debrief';
+    body = (
+      <div className="space-y-4">
+        <MissionDebrief state={state} rank={debrief?.rank ?? null} badges={debrief?.badges ?? []} />
+        <Button onClick={onClose}>Close</Button>
+      </div>
+    );
+  } else if (summary) {
     title = `Sol ${summary.sol} is over`;
     const lines = [
       summary.card ? (summary.jobDone ? 'You finished your urgent job. Well done!' : 'The urgent job was not done, so you missed what it gives.') : 'You did not choose a plan today.',
       ...summary.events,
     ];
+    const trade = summaryTradeOff(summary);
+    const changes = (Object.entries(summary.change) as [Resource, number][]).filter(([, delta]) => Math.abs(delta) >= 0.05);
+    const speech = [...lines, trade ?? '', changes.length ? `Your stores changed today. ${changes.map(([resource, delta]) => changeWords(resource, delta)).join('. ')}.` : '', tutorialSummary ? SUMMARY_STEP.text : ''].filter(Boolean).join(' ');
     body = (
       <div className="space-y-4">
+        {tutorialSummary && <TutorialCoach step={SUMMARY_STEP} />}
         <div className="flex items-start gap-3">
           <NolaMascot mood={summary.jobDone ? 'excited' : 'thinking'} size={70} floating={false} className="shrink-0" />
           <ul className="space-y-1 text-lg">
@@ -128,6 +170,13 @@ export function SolBriefing({ save, unlocked, onPlan, onSkip, onFinish, onClose 
             ))}
           </ul>
         </div>
+        <ReadAloudButton text={speech} tone="dark" />
+        {trade && (
+          <p className="rounded-2xl border-2 border-line p-3 text-lg">
+            <strong className="font-display text-nola-soft">Today's trade-off: </strong>
+            {trade}
+          </p>
+        )}
         {summary.card && (
           <div className="grid gap-3 sm:grid-cols-2">
             <section className="rounded-2xl border-2 border-go/50 p-3">
@@ -144,21 +193,43 @@ export function SolBriefing({ save, unlocked, onPlan, onSkip, onFinish, onClose 
             </section>
           </div>
         )}
+        {changes.length > 0 && (
+          <section aria-labelledby="sol-changes" className="rounded-2xl border-2 border-line p-3">
+            <h3 id="sol-changes" className="font-display text-lg">How your stores changed today (day and night)</h3>
+            <ul className="mt-2 grid gap-1 sm:grid-cols-2">
+              {changes.map(([resource, delta]) => {
+                const { name, icon: Icon } = LINE_LABELS[resource];
+                const up = delta > 0;
+                return (
+                  <li key={resource} className="flex items-center gap-2 text-base">
+                    <Icon aria-hidden="true" size={18} className="shrink-0 text-glow" />
+                    <span className="min-w-0 flex-1">{name}</span>
+                    <span className={`flex items-center gap-1 font-bold ${up ? 'text-go' : 'text-alert'}`}>
+                      {up ? <ArrowUp aria-hidden="true" size={16} /> : <ArrowDown aria-hidden="true" size={16} />}
+                      {up ? 'up' : 'down'} {Math.abs(Math.round(delta * 10) / 10)}
+                    </span>
+                    <ExplainButton resource={resource} />
+                  </li>
+                );
+              })}
+            </ul>
+          </section>
+        )}
         {summary.science && (() => {
           const card = pickFinding(science, summary.science, summary.sol);
           return card ? <AstronautScienceCard card={card} /> : null;
         })()}
-        {summary.missionOver === 'complete' && <p className="rounded-2xl bg-go/15 p-3 text-lg font-semibold text-go">Mission complete! You kept the crew going for all {sols} sols.</p>}
-        {summary.missionOver === 'failed' && <p className="rounded-2xl bg-alert/15 p-3 text-lg font-semibold text-alert">The crew is too unwell to carry on. The mission is over.</p>}
-        <Button onClick={onClose}>{summary.missionOver ? 'Close' : `Start sol ${summary.sol + 1}`}</Button>
+        {summary.missionOver === 'complete' && <p className="flex items-center gap-2 rounded-2xl bg-go/15 p-3 text-lg font-semibold"><Check aria-hidden="true" size={22} /> Mission complete! You kept the crew going for all {sols} sols.</p>}
+        {summary.missionOver === 'failed' && <p className="flex items-center gap-2 rounded-2xl bg-alert/15 p-3 text-lg font-semibold"><CircleAlert aria-hidden="true" size={22} /> The crew is too unwell to carry on. The mission is over.</p>}
+        {summary.missionOver ? <Button onClick={() => setShowDebrief(true)}>See your mission debrief</Button> : <Button onClick={onClose}>{`Start sol ${summary.sol + 1}`}</Button>}
       </div>
     );
   } else if (state.status !== 'active') {
-    title = 'Mission over';
+    title = 'Mission debrief';
     body = (
       <div className="space-y-4">
-        <p className="text-lg">{state.status === 'complete' ? `Mission complete! You finished all ${sols} sols.` : 'The crew is too unwell to carry on.'}</p>
-        <p className="text-mist">You can start again from the game menu: Restart the station.</p>
+        <MissionDebrief state={state} rank={debrief?.rank ?? null} badges={debrief?.badges ?? []} />
+        <p className="text-mist">To fly again, open the game menu and choose Restart the station.</p>
         <Button onClick={onClose}>Close</Button>
       </div>
     );
@@ -199,6 +270,7 @@ export function SolBriefing({ save, unlocked, onPlan, onSkip, onFinish, onClose 
         <div className="w-fit rounded-full bg-star">
           <ReadAloudButton text={`${intro} You lose things as soon as you choose. You gain things when you finish the urgent job.`} />
         </div>
+        {tutorial && <TutorialCoach step={tutorial} />}
         {cards.length > 0 ? (
           <div className="grid gap-4 md:grid-cols-3">
             {cards.map((card) => (
@@ -236,12 +308,12 @@ export function SolBriefing({ save, unlocked, onPlan, onSkip, onFinish, onClose 
               <Button variant="secondary" onClick={() => setConfirmEnd(false)}>
                 Not yet
               </Button>
-              <Button onClick={() => setSummary(onFinish())}>End the sol anyway</Button>
+              <Button onClick={finish}>End the sol anyway</Button>
             </div>
           </div>
         ) : (
           <div className="flex flex-wrap gap-3">
-            <Button onClick={() => (job && !job.done ? setConfirmEnd(true) : setSummary(onFinish()))}>
+            <Button onClick={() => (job && !job.done ? setConfirmEnd(true) : finish())}>
               <Moon aria-hidden="true" size={20} /> End the sol
             </Button>
             <Button variant="secondary" onClick={onClose}>

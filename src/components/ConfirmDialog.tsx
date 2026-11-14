@@ -1,4 +1,4 @@
-import { useEffect, useRef, type ReactNode } from 'react';
+import { useEffect, useId, useRef, type ReactNode } from 'react';
 import { Button } from './Button';
 
 interface ModalProps {
@@ -16,6 +16,8 @@ interface ModalProps {
  */
 export function Modal({ open, title, onClose, children, wide = false }: ModalProps) {
   const ref = useRef<HTMLDialogElement>(null);
+  // Each pop-up gets its own title id, so a pop-up opened inside another is announced correctly.
+  const titleId = useId();
 
   useEffect(() => {
     const dialog = ref.current;
@@ -29,14 +31,16 @@ export function Modal({ open, title, onClose, children, wide = false }: ModalPro
       ref={ref}
       onCancel={(event) => {
         event.preventDefault();
+        // Escape closes only this pop-up, not one it was opened from.
+        event.stopPropagation();
         onClose();
       }}
-      aria-labelledby="modal-title"
+      aria-labelledby={titleId}
       className={`m-auto w-[calc(100%-2rem)] rounded-3xl border-2 border-glow bg-hull p-0 text-star shadow-2xl backdrop:bg-void/80 ${wide ? 'max-w-3xl' : 'max-w-lg'}`}
     >
       {open && (
         <div className="max-h-[85dvh] overflow-y-auto p-5 sm:p-7">
-          <h2 id="modal-title" className="mb-4 text-2xl font-semibold">
+          <h2 id={titleId} className="mb-4 text-2xl font-semibold">
             {title}
           </h2>
           {children}

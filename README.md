@@ -194,6 +194,20 @@ Achievements are worked out from these records each time, not stored separately,
 
 Run its tests with `npx vitest run src/sol`.
 
+## Ranks, badges, tutorial and debrief
+
+- **Tutorial sol.** The first sol of every mission is guided by NOLA in five steps: walk to the Command Console, choose a plan, do the urgent job, end the sol, read the summary. The steps come from the saved game, so they pick up where the player left off. It can be skipped, and it ends when sol 1 ends (`src/game/sol/tutorial.ts`).
+- **Ask NOLA explainers.** Every resource (and muscles & bones, and rest) has a "?" button: what it is, why it matters, how it works in the game, one real-science fact, a Listen button, and an "Ask NOLA" link that fills in a question on the chat page (`src/game/sol/explainers.ts`).
+- **Sol-end summary.** Today's trade-off in one sentence ("You gave up 8 kWh of power and 1 kg of water to get more food."), what the plan gave and cost, how every store changed over the day and night (with up and down arrows and words), the Astronaut Science card, and a Listen button for the whole summary.
+- **Final debrief** when the mission ends (`src/game/progress/record.ts`):
+  - **Score out of 100.** Survival is worth 40 points, scaled by sols survived. Good reasoning is worth 60, the average of five habits: smart choices (spending from plenty, or topping up the lowest store, rebuilt from the ledger at the moment of each choice), protecting the crew before storms, crew care (nights without fatigue or weak muscles), follow-through on urgent jobs, and planning ahead (nights without a shortage). A habit with no chance to show it (for example, no storm happened) is not counted. Resources left over earn nothing directly.
+  - **"Your biggest trade-off was…"**: the choice that cost the biggest share of the stores, with the real amounts.
+  - **"What real mission planners do"**: three real practices, chosen to match the player's weakest habit and what happened in the mission.
+- **Concept badges** need both halves: the concept **learned** in its Academy module and **used** in the game. Shield Keeper (shielding), Power Budgeter (power budgeting), Signal Delay Expert (comms delay), Storm Smart, Fit for Space (exercise and rest), Life Support Pro.
+- **Ranks**, Cadet → Crew Member → Flight Engineer → Mission Specialist → Commander, from rank points: 1 per Academy module, 2 per badge, 5 for completing a mission. Commander also needs a completed mission scoring at least 60, so it takes good reasoning, not just time. Badges, best score and completed missions are saved at `users/{uid}/simulation/record`, so restarting the station keeps them; restarting the whole course clears them.
+- **Read-aloud friendly.** Summaries, debrief, explainers and tutorial steps have Listen buttons with text written for speech (short sentences, amounts in words such as "8 kWh of power", no symbols a voice would stumble on; a test checks the explainers).
+- **Colour-blind safe.** Good and bad are never shown by colour alone: arrows, ticks, locks, stars, the words LOW / up / down and numbers always go with them. The new "Colour-blind friendly colours" setting also swaps green and red for sky blue and amber (Okabe–Ito palette).
+
 ## Crew health and Astronaut Science (NASA OSDR)
 
 The sol engine tracks the crew's body as two conditions, each 0–100%, shown in the HUD:
@@ -335,6 +349,7 @@ If this goes beyond a hackathon demo to real children, get proper advice on chil
 - All eight lessons' content (well-formed, exactly one right answer per question, every slider activity starts unsolved and can be solved).
 - The knowledge search and NOLA's built-in replies, including the personal-information guard.
 - Space data validation, the NOAA scale thresholds, the NASA conversion and the fallback to simulated data.
+- Ranks, badges, score and debrief (rewarding reasoning over leftovers, storm readiness, follow-through, the biggest trade-off wording), the tutorial steps, the explainers' read-aloud wording, and the saved record.
 - Crew health and Astronaut Science: exercise and rest costs, nightly body wear, the OSDR route on recorded data, quotes matching the studies, citations, the offline fallback, and which finding explains each health change.
 - Earth communication: Mars distances against NASA's recorded closest approaches, the Moon delay, how the wait is sped up, replies blocked by a broken antenna, training mistakes, and the training questions.
 - The DONKI events route on real recorded NASA data (which events count, host order with and without a key, caching, the 502 answer), the offline archive, and the radiation storm rules (costs, harm, one storm at a time, old saves).

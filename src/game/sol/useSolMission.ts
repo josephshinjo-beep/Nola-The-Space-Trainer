@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { deleteSolMission, loadSolMission, saveSolMission } from '../../services/simulationRepository';
 import type { StormStart } from '../../sol/engine';
 import type { RadiationStorm, Result, StormChoice } from '../../sol/types';
-import { announceStorm, answerStorm, completeJob, finishSol, newSolSave, planSol, skipPlanning, stormHits, type SolSave, type SolSummary } from './solFlow';
+import { announceStorm, answerStorm, completeJob, skipTutorial, finishSol, newSolSave, planSol, skipPlanning, stormHits, type SolSave, type SolSummary } from './solFlow';
 
 export interface SolMission {
   /** Null while loading. */
@@ -17,6 +17,7 @@ export interface SolMission {
   answerStorm: (choice: StormChoice) => Result<SolSave>;
   /** The storm arrives now. Returns the storm that hit, or null. */
   stormHits: () => RadiationStorm | null;
+  skipTutorial: () => void;
 }
 
 /**
@@ -122,5 +123,9 @@ export function useSolMission(uid: string | undefined): SolMission {
     return result.storm ?? null;
   }, [commit]);
 
-  return { save, loadError, plan, skip, completeJob: complete, finish, restart, announceStorm: announce, answerStorm: answer, stormHits: hits };
+  const skipTheTutorial = useCallback(() => {
+    if (current.current) commit(skipTutorial(current.current));
+  }, [commit]);
+
+  return { save, loadError, plan, skip, completeJob: complete, finish, restart, announceStorm: announce, answerStorm: answer, stormHits: hits, skipTutorial: skipTheTutorial };
 }

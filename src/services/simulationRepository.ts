@@ -1,6 +1,7 @@
 import { deleteDoc, doc, getDoc, serverTimestamp, setDoc } from 'firebase/firestore';
 import { reviveState } from '../simulation/engine';
 import type { StationState } from '../simulation/types';
+import { reviveRecord, type SavedRecord } from '../game/progress/record';
 import { reviveSolSave, type SolSave } from '../game/sol/solFlow';
 import { db } from './firebase';
 
@@ -38,4 +39,21 @@ export async function saveSolMission(uid: string, save: SolSave): Promise<void> 
 
 export async function deleteSolMission(uid: string): Promise<void> {
   await deleteDoc(solDoc(uid));
+}
+
+// ---- The mission record (badges, best score), at users/{uid}/simulation/record. It survives station restarts.
+
+const recordDoc = (uid: string) => doc(db, 'users', uid, 'simulation', 'record');
+
+export async function loadMissionRecord(uid: string): Promise<SavedRecord> {
+  const snapshot = await getDoc(recordDoc(uid));
+  return reviveRecord(snapshot.exists() ? snapshot.data() : null);
+}
+
+export async function saveMissionRecord(uid: string, record: SavedRecord): Promise<void> {
+  await setDoc(recordDoc(uid), { ...record, savedAt: serverTimestamp() });
+}
+
+export async function deleteMissionRecord(uid: string): Promise<void> {
+  await deleteDoc(recordDoc(uid));
 }

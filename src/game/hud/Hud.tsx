@@ -8,6 +8,7 @@ import { isSunlit } from '../../simulation/engine';
 import { currentMission, MISSIONS } from '../../simulation/missions';
 import type { LogTone, ResourceId, StationState } from '../../simulation/types';
 import type { GameBridge } from '../GameBridge';
+import { ExplainButton } from '../sol/ResourceExplainer';
 
 const RESOURCES: { id: ResourceId; label: string; icon: LucideIcon }[] = [
   { id: 'oxygen', label: 'Oxygen', icon: Wind },
@@ -41,6 +42,7 @@ export function ResourceStrip({ state }: { state: StationState }) {
                 <span className="flex min-w-0 items-center gap-1">
                   <Icon aria-hidden="true" size={16} className={`shrink-0 ${low ? 'text-alert' : 'text-glow'}`} />
                   <span className="sr-only sm:not-sr-only sm:truncate">{label}</span>
+                  <ExplainButton resource={id === 'energy' ? 'power' : id} className="hidden h-5 w-5 border-0 sm:inline-flex" />
                 </span>
                 <span className={`whitespace-nowrap ${low ? 'text-alert' : ''}`}>{auto ? 'Auto' : `${value}%${low ? ' LOW' : ''}`}</span>
               </div>

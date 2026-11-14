@@ -22,13 +22,17 @@ import { EquipmentPanel } from '../game/hud/EquipmentPanel';
 import { InteractButton, Joystick, MissionPanel, NolaCaption, ResourceStrip } from '../game/hud/Hud';
 import { StationMapModal } from '../game/hud/StationMapModal';
 import { EQUIPMENT, findEquipment, findRoom, ROOMS, type EquipmentId } from '../game/stationMap';
+import { BodyStatus } from '../game/sol/BodyStatus';
 import { SolBriefing, solHint } from '../game/sol/SolBriefing';
 import { RadiationStormBanner, stormResultText } from '../game/sol/RadiationStormBanner';
 import { stormIsDue, urgentJob, type SolSave } from '../game/sol/solFlow';
 import { useSolMission } from '../game/sol/useSolMission';
+import { TutorialCoach } from '../game/sol/TutorialCoach';
+import { tutorialStep } from '../game/sol/tutorial';
+import { useMissionRecord } from '../game/progress/useMissionRecord';
 import { useSimulation } from '../game/useSimulation';
 import { SIM } from '../simulation/config';
-import { DEFAULT_INPUTS, machineStatus } from '../simulation/engine';
+import { DEFAULT_INPUTS, getStationStats, machineStatus } from '../simulation/engine';
 import { SOL_CONFIG } from '../sol/config';
 import { currentMission } from '../simulation/missions';
 import type { RoomId, StationState } from '../simulation/types';
@@ -80,7 +84,7 @@ function buildView(state: StationState, avatar: GameView['avatar'], reducedMotio
 
 function StationGame() {
   const { user, profile } = useAuth();
-  const { unlockedSystems } = useAcademyProgress();
+  const { unlockedSystems, completedModuleIds } = useAcademyProgress();
   const { settings } = useSettings();
   const weather = useSpaceWeather();
   const bridge = useMemo(() => new GameBridge(), []);
@@ -99,6 +103,12 @@ function StationGame() {
   const solMission = useSolMission(user?.uid);
   const solSave = solMission.save;
   const spaceEvents = useSpaceEvents();
+  const stationStats = useMemo(() => (state ? getStationStats(state) : null), [state]);
+  // Re-work badges only when something they depend on changes, not every clock tick.
+  const statsKey = stationStats ? `${stationStats.askedEarthFixes}-${stationStats.trainingFixes}` : '';
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const stableStats = useMemo(() => stationStats, [statsKey]);
+  const missionRecord = useMissionRecord(user?.uid, solSave, stableStats, completedModuleIds);
   const [stormMessage, setStormMessage] = useState<{ text: string; harmed: boolean; turn: number } | null>(null);
   const science = useAstronautScience();
   const [commsMessage, setCommsMessage] = useState<string | null>(null);
@@ -220,15 +230,16 @@ function StationGame() {
           <div className="flex flex-col gap-2">
             {solSave && (
               <section aria-label="Today's plan" className="pointer-events-auto w-64 max-w-[70vw] rounded-2xl border-2 border-nola bg-hull/90 p-3 backdrop-blur">
-                <p className="text-xs font-bold uppercase tracking-widest text-nola-soft">
-                  Sol {solSave.state.sol} of {SOL_LENGTH}
+                <p className="flex justify-between gap-2 text-xs font-bold uppercase tracking-widest text-nola-soft">
+                  <span>
+                    Sol {solSave.state.sol} of {SOL_LENGTH}
+                  </span>
+                  {missionRecord.loaded && <span className="text-mist">{missionRecord.rank.title}</span>}
                 </p>
                 <p aria-live="polite" className="text-sm font-semibold">
                   {solHint(solSave)}
                 </p>
-                <p className="mt-1 text-xs text-mist">
-                  Muscles &amp; bones {Math.round(solSave.state.body.muscleBone)}% · Rest {Math.round(solSave.state.body.rest)}%
-                </p>
+                <BodyStatus body={solSave.state.body} />
               </section>
             )}
             <EarthLinkPanel state={state} />
@@ -275,6 +286,10 @@ function StationGame() {
         </div>
 
         <div className="flex-1" />
+        {(() => {
+          const step = openEquipment === 'console' ? null : tutorialStep(solSave, false);
+          return step ? <TutorialCoach step={step} onSkip={solMission.skipTutorial} /> : null;
+        })()}
 
         {commsMessage && (
           <p role="status" className="pointer-events-auto w-fit max-w-md rounded-2xl border-2 border-glow bg-hull/95 px-3 py-2 text-sm font-semibold">
@@ -309,7 +324,7 @@ function StationGame() {
       </div>
 
       {openEquipment === 'console' && solSave ? (
-        <SolBriefing save={solSave} unlocked={unlockedSystems} onPlan={solMission.plan} onSkip={solMission.skip} onFinish={solMission.finish} onClose={closePanel} />
+        <SolBriefing save={solSave} unlocked={unlockedSystems} onPlan={solMission.plan} onSkip={solMission.skip} onFinish={solMission.finish} onClose={closePanel} tutorial={tutorialStep(solSave, true)} debrief={{ rank: missionRecord.rank, badges: missionRecord.badges }} />
       ) : (
         openEquipment && <EquipmentPanel id={openEquipment} state={state} dispatch={dispatch} weather={weather} onClose={closePanel} urgent={urgentHere} onSent={(text) => {
           closePanel();

@@ -18,6 +18,14 @@ describe('sanitizeSettings', () => {
   });
 });
 
+describe('colour-blind friendly colours', () => {
+  it('is off by default and kept when saved', () => {
+    expect(sanitizeSettings(null).colorSafe).toBe(false);
+    expect(sanitizeSettings({ colorSafe: true }).colorSafe).toBe(true);
+    expect(sanitizeSettings({ colorSafe: 'yes' }).colorSafe).toBe(false);
+  });
+});
+
 describe('sanitizeAvatar', () => {
   it('falls back to the default for unknown choices', () => {
     expect(sanitizeAvatar(undefined)).toEqual(DEFAULT_AVATAR);

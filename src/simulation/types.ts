@@ -79,7 +79,7 @@ export interface StationState {
   completedTasks: string[];
   /** Mission faults and storms already started, so each is triggered once. */
   triggered: string[];
-  stats: { stormsSheltered: number; harvests: number; repairs: number };
+  stats: { stormsSheltered: number; harvests: number; repairs: number; askedEarthFixes?: number; trainingFixes?: number };
   /** The base's site, chosen by the player (null until chosen). */
   site: SiteId | null;
   /** Questions to Mission Control, at most one per problem. */

@@ -115,6 +115,20 @@ html[data-contrast="high"] {
 }
 html[data-contrast="high"] .space-backdrop { display: none; }
 
+/*
+ * Colour-blind safe: "good" and "bad" become sky blue and amber (from the
+ * Okabe-Ito palette), which stay distinct for red-green colour blindness.
+ * Every indicator also uses an icon or a word, so colour is never the only cue.
+ */
+html[data-palette="safe"] {
+  --color-go: #7fc8f8;
+  --color-alert: #ffc94d;
+}
+html[data-palette="safe"][data-contrast="high"] {
+  --color-go: #b3e0ff;
+  --color-alert: #ffe08a;
+}
+
 /* Children who are sensitive to motion get a still interface. */
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

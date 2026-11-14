@@ -165,7 +165,7 @@ export function createInitialState(unlocked: readonly SystemId[], seed = 1): Sta
     healReadyAt: 0,
     completedTasks: [],
     triggered: [],
-    stats: { stormsSheltered: 0, harvests: 0, repairs: 0 },
+    stats: { stormsSheltered: 0, harvests: 0, repairs: 0, askedEarthFixes: 0, trainingFixes: 0 },
     site: null,
     earthCalls: [],
     log: [],
@@ -213,6 +213,8 @@ export function getStationStats(state: StationState): StationStats {
     stormsSheltered: state.stats.stormsSheltered,
     harvests: state.stats.harvests,
     repairs: state.stats.repairs,
+    askedEarthFixes: state.stats.askedEarthFixes ?? 0,
+    trainingFixes: state.stats.trainingFixes ?? 0,
   };
 }
 
@@ -474,6 +476,10 @@ export function applyAction(state: StationState, action: Action): ActionResult {
     case 'repair': {
       if (!hasFault(next, action.fault)) return refuse('Nothing needs fixing here right now.');
       next.faults = next.faults.filter((fault) => fault !== action.fault);
+      // Count how the crew solved it: with Mission Control's reply, or on their own training.
+      const askedEarth = next.earthCalls.some((call) => call.fault === action.fault && call.replied);
+      if (askedEarth) next.stats.askedEarthFixes = (next.stats.askedEarthFixes ?? 0) + 1;
+      else next.stats.trainingFixes = (next.stats.trainingFixes ?? 0) + 1;
       next.earthCalls = next.earthCalls.filter((call) => call.fault !== action.fault);
       next.stats.repairs += 1;
       completeTask(next, `repair:${action.fault}`);

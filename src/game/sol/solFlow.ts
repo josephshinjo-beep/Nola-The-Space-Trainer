@@ -20,10 +20,16 @@ export interface SolSave {
   state: SolState;
   /** Task ids of urgent jobs finished in the current sol. */
   doneTasks: string[];
+  /** Identifies this mission, so a finished mission is counted in the record only once. */
+  missionId: string;
+  /** True once the tutorial sol has been finished or skipped. */
+  tutorialDone: boolean;
 }
 
+const newMissionId = () => `m-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+
 export function newSolSave(): SolSave {
-  return { version: 1, state: createSolState(), doneTasks: [] };
+  return { version: 1, state: createSolState(), doneTasks: [], missionId: newMissionId(), tutorialDone: false };
 }
 
 /** Morning: choose one card. The engine takes its costs and plans its urgent job. */
@@ -89,6 +95,9 @@ export function stormIsDue(save: SolSave, everySols: number): boolean {
   if (s.status !== 'active' || s.phase !== 'action' || s.storm || s.sol % everySols !== 0) return false;
   return !s.ledger.some((entry) => entry.sol === s.sol && entry.source.startsWith('storm:') && entry.label === 'Radiation storm warning');
 }
+
+/** The player skipped the tutorial. */
+export const skipTutorial = (save: SolSave): SolSave => ({ ...save, tutorialDone: true });
 
 /** What a sol did, in a form the summary screen can word for children. */
 export interface SolSummary {
@@ -172,7 +181,8 @@ export function finishSol(save: SolSave, conditions: NightConditions = CLEAR_NIG
     science: change.crewHealth !== undefined || scienceTopicFor(solEntries) ? scienceTopicFor(solEntries) : null,
     missionOver: after.status === 'active' ? null : after.status,
   };
-  return { ok: true, state: { ...save, state: after, doneTasks: [] }, summary };
+  // Finishing the first sol finishes the tutorial.
+  return { ok: true, state: { ...save, state: after, doneTasks: [], tutorialDone: save.tutorialDone || before.sol === 1 }, summary };
 }
 
 /** Checks a save loaded from the database before trusting it. */
@@ -187,6 +197,9 @@ export function reviveSolSave(raw: unknown): SolSave | null {
   return {
     version: 1,
     doneTasks: save.doneTasks.filter((id): id is string => typeof id === 'string'),
+    // Saves from before these fields existed: a fixed id, and no tutorial once past sol 1.
+    missionId: typeof save.missionId === 'string' && save.missionId ? save.missionId : 'mission-before-records',
+    tutorialDone: typeof save.tutorialDone === 'boolean' ? save.tutorialDone : state.sol > 1,
     state: {
       ...(state as SolState),
       tonight: { ...state.tonight, deferred: state.tonight.deferred ?? [] },
