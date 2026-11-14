@@ -23,6 +23,8 @@ export interface Reply {
   sources: ReplySource[];
   /** Who wrote the answer, shown to the student for honesty. */
   origin: 'built-in' | 'ai';
+  /** Related questions the student can tap when NOLA has no confident answer. */
+  suggestions?: string[];
 }
 
 /** What NOLA knows about the student's situation. Read-only facts, no personal details. */
@@ -103,7 +105,7 @@ function hintReply(context: CompanionContext): string {
 }
 
 /** Chooses NOLA's built-in reply to a message. */
-export function builtInReply(message: string, hits: readonly SearchHit[], context: CompanionContext): Reply {
+export function builtInReply(message: string, hits: readonly SearchHit[], context: CompanionContext, suggestions: readonly string[] = []): Reply {
   const text = message.trim();
   const reply = (words: string, mood: NolaMood = 'happy', sources: ReplySource[] = []): Reply => ({ text: words, mood, sources, origin: 'built-in' });
 
@@ -125,5 +127,9 @@ export function builtInReply(message: string, hits: readonly SearchHit[], contex
   if (GREETING.test(text)) return reply("Hello, cadet! I'm NOLA. Ask me anything about living in space, or say \"What should I do next?\" for a hint.", 'excited');
   if (THANKS.test(text)) return reply("You're welcome! Asking questions is exactly what good astronauts do.", 'excited');
 
+  // Something related is in the notes, but nothing answers this exactly: offer the nearest questions.
+  if (suggestions.length > 0) {
+    return { ...reply("I don't have a good answer for that in my notes yet. Were you asking about one of these?", 'thinking'), suggestions: [...suggestions] };
+  }
   return reply(OFF_TOPIC_REPLY, 'thinking');
 }

@@ -6,7 +6,7 @@ import { ReadAloudButton } from '../features/accessibility/ReadAloudButton';
 import { useAcademyProgress } from '../features/academy/AcademyProgressContext';
 import { useAuth } from '../features/auth/AuthContext';
 import { askNola, checkAiSetup, getAiStatus, type AiStatus, type ChatTurn } from '../features/companion/chatService';
-import { loadKnowledge, searchKnowledge, type Passage } from '../features/companion/knowledge';
+import { loadKnowledge, searchKnowledge, suggestQuestions, type Passage } from '../features/companion/knowledge';
 import { NolaMascot, type NolaMood } from '../features/companion/NolaMascot';
 import { buildContext, SUGGESTED_QUESTIONS, type Reply } from '../features/companion/responder';
 import { loadSimulation } from '../services/simulationRepository';
@@ -73,6 +73,7 @@ export function CompanionPage() {
       message,
       history,
       hits: searchKnowledge(knowledge, message),
+      suggestions: suggestQuestions(knowledge, message),
       context: buildContext(progress, station),
       getToken: async () => (user ? user.getIdToken() : null),
     });
@@ -103,6 +104,12 @@ export function CompanionPage() {
         <p role="status" data-testid="ai-status" className="flex items-start gap-2 rounded-2xl border-2 border-go bg-go/10 px-4 py-3 font-semibold text-go">
           <CircleCheck aria-hidden="true" size={22} className="mt-0.5 shrink-0" />
           <span>AI key is working. NOLA is answering with Gemini{aiStatus.model ? ` (${aiStatus.model})` : ''}.</span>
+        </p>
+      )}
+      {aiStatus.state === 'trouble' && (
+        <p role="status" data-testid="ai-status" className="flex items-start gap-2 rounded-2xl border-2 border-nola-soft bg-nola/10 px-4 py-3 font-semibold text-nola-soft">
+          <TriangleAlert aria-hidden="true" size={22} className="mt-0.5 shrink-0" />
+          <span>The AI could not answer that question ({aiStatus.reason}), so NOLA used its built-in notes. It will try the AI again next time.</span>
         </p>
       )}
       {aiStatus.state === 'off' && (
@@ -139,6 +146,22 @@ export function CompanionPage() {
                         </Link>
                       ))}
                     </p>
+                  )}
+                  {item.reply.suggestions && item.reply.suggestions.length > 0 && (
+                    <ul className="mt-3 flex flex-col gap-2">
+                      {item.reply.suggestions.map((question) => (
+                        <li key={question}>
+                          <button
+                            type="button"
+                            disabled={thinking}
+                            onClick={() => void send(question)}
+                            className="min-h-11 rounded-2xl border-2 border-void/30 bg-void/5 px-4 py-2 text-left text-base font-semibold hover:border-nola disabled:opacity-60"
+                          >
+                            {question}
+                          </button>
+                        </li>
+                      ))}
+                    </ul>
                   )}
                   <ReadAloudButton text={item.reply.text} className="mt-3" />
                 </div>

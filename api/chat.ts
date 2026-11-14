@@ -24,13 +24,19 @@ import { createRemoteJWKSet, jwtVerify } from 'jose';
  * configured and whether Google accepts the key (never the key itself).
  */
 
+/** Vercel may stop a function after this many seconds (also set in vercel.json). */
 export const maxDuration = 30;
 
 /**
  * Models to try, in order. Google renames and retires models, so if one is
  * not found the next is tried. AI_MODEL, when set, goes first.
  */
-const MODEL_CHOICES = ['gemini-2.5-flash', 'gemini-flash-latest', 'gemini-2.0-flash'];
+const MODEL_CHOICES = ['gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemini-flash-latest', 'gemini-2.0-flash'];
+
+/** How long to wait for one model before moving on to the next. */
+const MODEL_TIMEOUT_MS = 9_000;
+/** Stop trying further models after this long, so the student is never left waiting. */
+const TOTAL_BUDGET_MS = 20_000;
 
 function modelsToTry(): string[] {
   const preferred = process.env.AI_MODEL?.trim();
@@ -42,6 +48,11 @@ const firebaseProjectId = () => process.env.FIREBASE_PROJECT_ID || process.env.V
 
 /** Remembers which model worked, so later requests go straight to it. */
 let workingModel: string | null = null;
+
+/** For tests. */
+export function forgetWorkingModel(): void {
+  workingModel = null;
+}
 const GEMINI_URL = 'https://generativelanguage.googleapis.com/v1beta/models';
 
 /** The one reply NOLA gives to anything that is not about space, NASA, the lessons or the app. */
@@ -188,8 +199,25 @@ interface GeminiResponse {
 }
 
 export class GeminiError extends Error {
-  constructor(readonly status: number) {
-    super(`Gemini answered ${status}`);
+  constructor(
+    readonly status: number,
+    /** Google's own explanation, shown to help fix set-up problems. */
+    readonly detail = '',
+    /** Google's machine-readable reason, such as API_KEY_INVALID. */
+    readonly reason = '',
+  ) {
+    super(`Gemini answered ${status}${detail ? `: ${detail}` : ''}`);
+  }
+}
+
+/** Reads Google's error reply into a GeminiError. */
+async function toGeminiError(response: Response): Promise<GeminiError> {
+  try {
+    const body = (await response.json()) as { error?: { message?: string; status?: string; details?: { reason?: string }[] } };
+    const reason = body.error?.details?.find((item) => item.reason)?.reason ?? body.error?.status ?? '';
+    return new GeminiError(response.status, (body.error?.message ?? '').slice(0, 240), reason);
+  } catch {
+    return new GeminiError(response.status);
   }
 }
 
@@ -197,13 +225,17 @@ export class GeminiError extends Error {
  * Asks Gemini for NOLA's reply.
  * Returns the answer text, the fixed off-topic reply, or null when Gemini
  * blocked the request or returned nothing (the app then uses a built-in answer).
+ *
+ * `quickMode` switches off the model's slow "thinking" step. NOLA's answers
+ * are short and come with lesson material, so they do not need it, and
+ * without it replies arrive in a second or two instead of ten or more.
  */
-export async function askGemini(chat: ChatRequest, apiKey: string, model: string, fetcher: typeof fetch = fetch): Promise<string | null> {
+export async function askGemini(chat: ChatRequest, apiKey: string, model: string, fetcher: typeof fetch = fetch, quickMode = true, timeoutMs = MODEL_TIMEOUT_MS): Promise<string | null> {
   const response = await fetcher(`${GEMINI_URL}/${encodeURIComponent(model)}:generateContent`, {
     method: 'POST',
     // The key travels in a header, not the address, so it stays out of server logs.
     headers: { 'Content-Type': 'application/json', 'x-goog-api-key': apiKey },
-    signal: AbortSignal.timeout(25_000),
+    signal: AbortSignal.timeout(timeoutMs),
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: SYSTEM_PROMPT }] },
       contents: [
@@ -211,12 +243,16 @@ export async function askGemini(chat: ChatRequest, apiKey: string, model: string
         ...chat.history.map((turn) => ({ role: turn.role === 'assistant' ? 'model' : 'user', parts: [{ text: turn.content }] })),
         { role: 'user', parts: [{ text: buildUserTurn(chat) }] },
       ],
-      generationConfig: { temperature: 0.4, maxOutputTokens: 2048 },
+      generationConfig: {
+        temperature: 0.4,
+        maxOutputTokens: quickMode ? 700 : 2048,
+        ...(quickMode ? { thinkingConfig: { thinkingBudget: 0 } } : {}),
+      },
       safetySettings: SAFETY_SETTINGS,
       // No tools are provided: the model can only reply with text.
     }),
   });
-  if (!response.ok) throw new GeminiError(response.status);
+  if (!response.ok) throw await toGeminiError(response);
 
   const data = (await response.json()) as GeminiResponse;
   const candidate = data.candidates?.[0];
@@ -231,21 +267,39 @@ export async function askGemini(chat: ChatRequest, apiKey: string, model: string
   return answer;
 }
 
-/** Tries each model in turn until one exists. Any other failure is reported at once. */
-export async function askGeminiWithFallback(chat: ChatRequest, apiKey: string, fetcher: typeof fetch = fetch): Promise<string | null> {
+const isTimeout = (error: unknown) => error instanceof Error && (error.name === 'TimeoutError' || error.name === 'AbortError');
+const isBadKey = (error: GeminiError) => error.reason === 'API_KEY_INVALID' || error.status === 401 || /api key/i.test(error.detail);
+
+/**
+ * Tries each model in turn. It moves on when a model is missing, busy,
+ * out of quota or too slow, and gives up at once when the key itself is bad.
+ */
+export async function askGeminiWithFallback(chat: ChatRequest, apiKey: string, fetcher: typeof fetch = fetch, now: () => number = Date.now): Promise<string | null> {
   const candidates = workingModel ? [workingModel, ...modelsToTry().filter((model) => model !== workingModel)] : modelsToTry();
-  let lastError: unknown = new GeminiError(404);
+  const started = now();
+  let lastError: unknown = new GeminiError(404, 'No Gemini model could be used.');
+
   for (const model of candidates) {
+    const remaining = TOTAL_BUDGET_MS - (now() - started);
+    if (remaining < 2_000) break;
+    const timeout = Math.min(MODEL_TIMEOUT_MS, remaining);
     try {
-      const answer = await askGemini(chat, apiKey, model, fetcher);
+      let answer: string | null;
+      try {
+        answer = await askGemini(chat, apiKey, model, fetcher, true, timeout);
+      } catch (error) {
+        // A few models do not accept the "no thinking" setting: ask again without it.
+        if (!(error instanceof GeminiError) || error.status !== 400 || !/think/i.test(error.detail)) throw error;
+        answer = await askGemini(chat, apiKey, model, fetcher, false, timeout);
+      }
       workingModel = model;
       return answer;
     } catch (error) {
       lastError = error;
-      // 404 means "no such model": try the next name. Anything else is a real failure.
-      if (!(error instanceof GeminiError) || error.status !== 404) throw error;
-      console.warn(`Gemini model "${model}" was not found; trying the next one.`);
       if (workingModel === model) workingModel = null;
+      const moveOn = isTimeout(error) || (error instanceof GeminiError && !isBadKey(error) && [404, 429, 500, 502, 503, 504].includes(error.status));
+      if (!moveOn) throw error;
+      console.warn(`Gemini model "${model}" could not answer (${isTimeout(error) ? 'too slow' : (error as GeminiError).status}); trying the next one.`);
     }
   }
   throw lastError;
@@ -274,15 +328,22 @@ export async function POST(request: Request): Promise<Response> {
     if (answer === null) return json(200, { answer: null, reason: 'declined' });
     return json(200, { answer, offTopic: answer === OFF_TOPIC_REPLY });
   } catch (error) {
+    if (isTimeout(error)) {
+      console.error('Gemini did not answer in time.');
+      return json(504, { error: 'ai_failed', detail: 'timeout' });
+    }
     if (error instanceof GeminiError) {
-      console.error(`Gemini request failed with status ${error.status}.`);
-      if (error.status === 429) return json(429, { error: 'slow_down', detail: 'gemini_quota' });
-      if (error.status === 400 || error.status === 401 || error.status === 403) return json(503, { error: 'ai_unavailable', detail: 'key_rejected' });
-      if (error.status === 404) return json(503, { error: 'ai_unavailable', detail: 'model_not_found' });
-      return json(502, { error: 'ai_failed', detail: `gemini_${error.status}` });
+      console.error(error.message);
+      const message = error.detail;
+      if (isBadKey(error)) return json(503, { error: 'ai_unavailable', detail: 'key_rejected', message });
+      if (error.status === 403) return json(503, { error: 'ai_unavailable', detail: 'key_not_allowed', message });
+      if (error.status === 429) return json(429, { error: 'slow_down', detail: 'gemini_quota', message });
+      if (error.status === 404) return json(503, { error: 'ai_unavailable', detail: 'model_not_found', message });
+      if (error.status === 400) return json(502, { error: 'ai_failed', detail: 'gemini_rejected_request', message });
+      return json(502, { error: 'ai_failed', detail: 'gemini_busy', message });
     }
     console.error('Unexpected chat error', error);
-    return json(502, { error: 'ai_failed', detail: 'unexpected' });
+    return json(502, { error: 'ai_failed', detail: 'unexpected', message: error instanceof Error ? error.message.slice(0, 200) : '' });
   }
 }
 

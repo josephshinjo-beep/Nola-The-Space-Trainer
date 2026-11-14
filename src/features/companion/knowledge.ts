@@ -1,5 +1,6 @@
 import { loadLesson } from '../academy/content';
 import { CURRICULUM } from '../academy/curriculum';
+import { SPACE_FACTS } from './spaceFacts';
 
 /**
  * NOLA's knowledge base and the search over it (the "retrieval" part of
@@ -81,12 +82,12 @@ export function loadKnowledge(): Promise<Passage[]> {
         }),
       );
     }),
-  ).then((groups) => [...groups.flat(), ...APP_HELP]);
+  ).then((groups) => [...groups.flat(), ...SPACE_FACTS, ...APP_HELP]);
   return cache;
 }
 
 const STOP_WORDS = new Set(
-  'a an the and or but if so of to in on at by for from with about into over is are was were be been being am do does did done have has had can could would should will shall may might must i me my you your we our they them their it its this that these those there here what which who whom whose when where why how not no yes as than then too very just also get got make made thing things please tell explain know want need like much many some any does work works'.split(' '),
+  'a an the and or but if so of to in on at by for from with about into over is are was were be been being am do does did done have has had can could would should will shall may might must i me my you your we our they them their it its this that these those there here what which who whom whose when where why how not no yes as than then too very just also get got make made thing things please tell explain know want need like some any does work works'.split(' '),
 );
 
 /** Reduces a word to a rough root so "recycling", "recycled" and "recycle" all match. */
@@ -116,13 +117,17 @@ export interface SearchHit {
   score: number;
 }
 
-/**
- * Finds the passages that best match a question. Rare words count for
- * more than common ones, and a match in the title counts for more than a
- * match in the text. Returns nothing when the question is not really about
- * anything in the knowledge base.
- */
-export function searchKnowledge(passages: readonly Passage[], question: string, limit = 3): SearchHit[] {
+/** A word found in more than this share of all passages ("space", "Earth") cannot carry a match on its own. */
+const COMMON_SHARE = 0.12;
+
+interface Scored extends SearchHit {
+  /** True when the match is good enough to be given as the answer. */
+  confident: boolean;
+  /** True when the question shares a title or keyword word with the passage: worth suggesting. */
+  related: boolean;
+}
+
+function scoreAll(passages: readonly Passage[], question: string): Scored[] {
   const queryTokens = [...new Set(tokenize(question))];
   if (queryTokens.length === 0) return [];
 
@@ -132,18 +137,24 @@ export function searchKnowledge(passages: readonly Passage[], question: string, 
     keywords: new Set(tokenize(passage.keywords ?? '')),
     text: tokenize(passage.text),
   }));
+  const spread = new Map<string, number>();
+  for (const token of queryTokens) {
+    spread.set(token, indexed.filter((entry) => entry.title.has(token) || entry.keywords.has(token) || entry.text.includes(token)).length);
+  }
+  // Squared so that words found in many passages count for very little.
   const rarity = (token: string) => {
-    const containing = indexed.filter((entry) => entry.title.has(token) || entry.keywords.has(token) || entry.text.includes(token)).length;
-    // Squared so that words found in many passages ("space", "astronaut") count for very little.
+    const containing = spread.get(token) ?? 0;
     return containing === 0 ? 0 : Math.log(1 + passages.length / containing) ** 2;
   };
+  const isCommon = (token: string) => (spread.get(token) ?? 0) / passages.length > COMMON_SHARE;
 
-  const hits: SearchHit[] = [];
+  const scored: Scored[] = [];
   for (const entry of indexed) {
     let score = 0;
     let matched = 0;
     let titleMatches = 0;
     let keyHit = false;
+    let distinctive = false;
     for (const token of queryTokens) {
       const inTitle = entry.title.has(token) || entry.keywords.has(token);
       const count = entry.text.filter((word) => word === token).length;
@@ -151,13 +162,37 @@ export function searchKnowledge(passages: readonly Passage[], question: string, 
       matched += 1;
       if (entry.title.has(token)) titleMatches += 1;
       keyHit ||= inTitle;
+      distinctive ||= !isCommon(token);
       score += rarity(token) * ((inTitle ? 2.5 : 0) + (count > 0 ? 1 + Math.log(count) : 0));
     }
-    // Ignore weak, accidental matches (one common word out of several).
+    if (score <= 0) continue;
     const coverage = matched / queryTokens.length;
     // A title made up mostly of the question's words is a strong sign of the right passage.
     const titleCoverage = entry.title.size > 0 ? titleMatches / entry.title.size : 0;
-    if (score > 0 && (coverage > 0.5 || (keyHit && coverage >= 0.34))) hits.push({ passage: entry.passage, score: score * (0.5 + coverage) * (1 + titleCoverage) });
+    // Confident only if enough of the question matched AND the match rests on a
+    // telling word, not just on everyday ones such as "Earth" or "space".
+    const enough = coverage > 0.5 || (keyHit && coverage >= 0.34);
+    const confident = enough && (distinctive || (titleCoverage >= 0.6 && coverage >= 0.75));
+    scored.push({ passage: entry.passage, score: score * (0.5 + coverage) * (1 + titleCoverage), confident, related: keyHit && coverage >= 0.34 });
   }
-  return hits.sort((a, b) => b.score - a.score).slice(0, limit);
+  return scored.sort((x, y) => y.score - x.score);
+}
+
+/**
+ * Finds the passages that answer a question. Returns nothing when no
+ * passage is a confident match; NOLA then says so instead of guessing.
+ */
+export function searchKnowledge(passages: readonly Passage[], question: string, limit = 3): SearchHit[] {
+  return scoreAll(passages, question)
+    .filter((hit) => hit.confident)
+    .slice(0, limit)
+    .map(({ passage, score }) => ({ passage, score }));
+}
+
+/** Questions NOLA can answer that are near the one asked, for "did you mean" suggestions. */
+export function suggestQuestions(passages: readonly Passage[], question: string, limit = 3): string[] {
+  return scoreAll(passages, question)
+    .filter((hit) => hit.related)
+    .slice(0, limit)
+    .map((hit) => hit.passage.title);
 }

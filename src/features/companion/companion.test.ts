@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { askGemini, askGeminiWithFallback, GET as chatStatus, buildUserTurn, GeminiError, OFF_TOPIC_REPLY as SERVER_OFF_TOPIC_REPLY, parseChatRequest, POST, type ChatRequest } from '../../../api/chat';
+import { askGemini, askGeminiWithFallback, forgetWorkingModel, GET as chatStatus, buildUserTurn, GeminiError, OFF_TOPIC_REPLY as SERVER_OFF_TOPIC_REPLY, parseChatRequest, POST, type ChatRequest } from '../../../api/chat';
 import { GET, normalizeDonki } from '../../../api/space-weather';
 import { FallbackProvider, MockSpaceDataProvider, NasaDonkiProvider } from '../../data/providers';
 import { geomagneticScale, radioBlackoutScale, summarizeSpaceWeather } from '../../data/spaceWeatherModel';
@@ -9,7 +9,7 @@ import { EQUIPMENT, ROOMS, buildWalkGrid, standingSpot, TILE } from '../../game/
 import { createInitialState } from '../../simulation/engine';
 import { MISSIONS } from '../../simulation/missions';
 import { askNola, checkAiSetup, resetAiAvailability } from './chatService';
-import { loadKnowledge, searchKnowledge, tokenize } from './knowledge';
+import { loadKnowledge, searchKnowledge, suggestQuestions, tokenize } from './knowledge';
 import { buildContext, builtInReply, describeContext, OFF_TOPIC_REPLY, type CompanionContext } from './responder';
 
 const NO_CONTEXT: CompanionContext = { modulesCompleted: 0, nextModuleTitle: 'Understanding Space', missionTitle: null, nextTask: null, warnings: [], hasStation: false };
@@ -18,6 +18,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
   resetAiAvailability();
+  forgetWorkingModel();
 });
 
 describe('knowledge search', () => {
@@ -37,6 +38,38 @@ describe('knowledge search', () => {
     expect(top('what happened on apollo 13')?.text).toMatch(/Apollo 13/);
     expect(top('how do i unlock rooms')?.id).toBe('help-unlock');
     expect(top('why is co2 dangerous')?.source.to).toBe('/academy/oxygen-and-breathing');
+  });
+
+  it('answers common space questions the lessons do not cover', async () => {
+    const passages = await loadKnowledge();
+    const top = (question: string) => searchKnowledge(passages, question)[0]?.passage;
+    expect(top("which is bigger earth or mars'")?.text).toMatch(/Earth is bigger/);
+    expect(top('how many planets are there')?.text).toMatch(/eight planets/);
+    expect(top('what is a black hole')?.title).toBe('What is a black hole?');
+    expect(top('who was the first man on the moon')?.text).toMatch(/Neil Armstrong/);
+    expect(top('why is mars red')?.text).toMatch(/iron oxide/);
+    expect(top('how do rockets work')?.title).toBe('How do rockets work?');
+    expect(top('what is nasa')?.title).toBe('What is NASA?');
+    expect(top('how hot is the sun')?.title).toBe('What is the Sun?');
+    expect(top('what is the moon')?.title).toBe('What is the Moon?');
+    expect(top('tell me about the earth')?.title).toBe('What is Earth?');
+    expect(top('how far is mars')?.title).toBe('How far away are the Moon and Mars?');
+    expect(top('can you breathe on mars')?.text).toMatch(/^No\./);
+    expect(top('what do astronauts eat')?.source.to).toBe('/academy/food-and-agriculture');
+    expect(top('why is the sky blue')).toBeUndefined();
+  });
+
+  it('does not guess from everyday words, and offers nearby questions instead', async () => {
+    const passages = await loadKnowledge();
+    // The question from the bug report must never again get the radiation card.
+    expect(searchKnowledge(passages, "which is bigger earth or mars'")[0]?.passage.source.to).not.toBe('/academy/radiation-protection');
+    // No confident answer: NOLA offers the nearest questions instead of guessing.
+    const question = 'is the moon made of cheese';
+    expect(searchKnowledge(passages, question)).toEqual([]);
+    const reply = builtInReply(question, [], NO_CONTEXT, suggestQuestions(passages, question));
+    expect(reply.text).toMatch(/Were you asking about one of these/);
+    expect(reply.suggestions?.length).toBeGreaterThan(0);
+    expect(suggestQuestions(passages, 'who won the football match')).toEqual([]);
   });
 
   it('returns nothing for questions outside its knowledge', async () => {
@@ -192,6 +225,8 @@ describe('AI backend (api/chat)', () => {
       expect(sent.safetySettings).toHaveLength(4);
       expect(sent.safetySettings.every((s: { threshold: string }) => s.threshold === 'BLOCK_LOW_AND_ABOVE')).toBe(true);
       expect(sent.tools).toBeUndefined();
+      // The slow "thinking" step is switched off so answers come back quickly.
+      expect(sent.generationConfig.thinkingConfig).toEqual({ thinkingBudget: 0 });
     });
 
     it('turns the off-topic marker into the fixed "ask about space" reply', async () => {
@@ -215,9 +250,55 @@ describe('AI backend (api/chat)', () => {
         return seen.length < 2 ? Response.json({}, { status: 404 }) : Response.json(reply('Hello from the second model.'));
       }) as unknown as typeof fetch;
       expect(await askGeminiWithFallback(chat, 'k', fetcher)).toBe('Hello from the second model.');
-      expect(seen).toEqual(['gemini-2.5-flash', 'gemini-flash-latest']);
-      // A rejected key is reported at once, not retried on other models.
-      await expect(askGeminiWithFallback(chat, 'k', gemini({}, 403))).rejects.toMatchObject({ status: 403 });
+      expect(seen).toEqual(['gemini-2.5-flash', 'gemini-2.5-flash-lite']);
+    });
+
+    it('moves on when a model is too slow, busy or out of quota', async () => {
+      for (const failure of ['timeout', 503, 429] as const) {
+        forgetWorkingModel();
+        let calls = 0;
+        const fetcher = (async () => {
+          calls += 1;
+          if (calls > 1) return Response.json(reply('Answer from the backup model.'));
+          if (failure === 'timeout') throw Object.assign(new Error('timed out'), { name: 'TimeoutError' });
+          return Response.json({ error: { message: 'busy', status: 'UNAVAILABLE' } }, { status: failure });
+        }) as unknown as typeof fetch;
+        expect(await askGeminiWithFallback(chat, 'k', fetcher), String(failure)).toBe('Answer from the backup model.');
+        expect(calls).toBe(2);
+      }
+    });
+
+    it('stops at once when the key is bad, and keeps Google\'s explanation', async () => {
+      let calls = 0;
+      const fetcher = (async () => {
+        calls += 1;
+        return Response.json({ error: { message: 'API key not valid. Please pass a valid API key.', status: 'INVALID_ARGUMENT', details: [{ reason: 'API_KEY_INVALID' }] } }, { status: 400 });
+      }) as unknown as typeof fetch;
+      await expect(askGeminiWithFallback(chat, 'k', fetcher)).rejects.toMatchObject({ status: 400, reason: 'API_KEY_INVALID', detail: expect.stringMatching(/API key not valid/) });
+      expect(calls).toBe(1);
+    });
+
+    it('asks again without the quick setting if a model does not accept it', async () => {
+      const bodies: { generationConfig: { thinkingConfig?: unknown } }[] = [];
+      const fetcher = (async (_url: string, init: RequestInit) => {
+        bodies.push(JSON.parse(init.body as string));
+        return bodies.length === 1 ? Response.json({ error: { message: 'Thinking budget 0 is invalid for this model.' } }, { status: 400 }) : Response.json(reply('Thought about it.'));
+      }) as unknown as typeof fetch;
+      expect(await askGeminiWithFallback(chat, 'k', fetcher)).toBe('Thought about it.');
+      expect(bodies[0]!.generationConfig.thinkingConfig).toBeDefined();
+      expect(bodies[1]!.generationConfig.thinkingConfig).toBeUndefined();
+    });
+
+    it('gives up within its time budget instead of trying models forever', async () => {
+      let clock = 0;
+      let calls = 0;
+      const fetcher = (async () => {
+        calls += 1;
+        clock += 9_000;
+        throw Object.assign(new Error('timed out'), { name: 'TimeoutError' });
+      }) as unknown as typeof fetch;
+      await expect(askGeminiWithFallback(chat, 'k', fetcher, () => clock)).rejects.toMatchObject({ name: 'TimeoutError' });
+      expect(calls).toBeLessThanOrEqual(3);
     });
   });
 

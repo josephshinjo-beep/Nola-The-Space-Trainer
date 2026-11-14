@@ -10,6 +10,8 @@ interface AskOptions {
   message: string;
   history: ChatTurn[];
   hits: SearchHit[];
+  /** Nearby questions to offer when there is no confident built-in answer. */
+  suggestions?: string[];
   context: CompanionContext;
   /** Gets the student's current login token, which proves to the server who is asking. */
   getToken: () => Promise<string | null>;
@@ -25,7 +27,9 @@ let aiAvailable: boolean | null = null;
 export type AiStatus =
   | { state: 'unknown' }
   | { state: 'connected'; model?: string }
-  | { state: 'off'; reason: string };
+  | { state: 'off'; reason: string }
+  /** The key is set up, but the last question could not be answered by the AI. */
+  | { state: 'trouble'; reason: string };
 
 let aiStatus: AiStatus = { state: 'unknown' };
 export const getAiStatus = (): AiStatus => aiStatus;
@@ -34,15 +38,22 @@ const REASONS: Record<string, string> = {
   missing_key: 'the server has no GEMINI_API_KEY',
   missing_project_id: 'the server has no FIREBASE_PROJECT_ID',
   key_rejected: 'Google rejected the Gemini API key',
+  key_not_allowed: 'Google will not let this key use Gemini',
   model_not_found: 'none of the Gemini models are available to this key',
-  gemini_quota: 'the Gemini quota is used up for now',
+  gemini_quota: 'the Gemini free quota is used up for the moment',
+  gemini_busy: 'Gemini is overloaded right now',
+  gemini_rejected_request: 'Gemini rejected the request',
+  timeout: 'Gemini took too long to answer',
 };
 
 async function explain(response: Response, isJson: boolean): Promise<string> {
   if (!isJson) return 'there is no AI server at this address';
   try {
-    const body = (await response.clone().json()) as { error?: string; detail?: string };
-    if (body.detail && REASONS[body.detail]) return REASONS[body.detail]!;
+    const body = (await response.clone().json()) as { error?: string; detail?: string; message?: string };
+    const known = body.detail ? REASONS[body.detail] : undefined;
+    // Google's own explanation is the most useful thing to show when there is one.
+    if (known) return body.message ? `${known}. Google said: "${body.message}"` : known;
+    if (body.message) return `${body.detail ?? 'error'}: "${body.message}"`;
     if (body.error === 'not_signed_in') return 'the server could not verify your login';
     if (body.error === 'slow_down') return 'too many questions in a short time';
     return `the AI server answered with an error (${body.detail ?? body.error ?? response.status})`;
@@ -62,8 +73,8 @@ const KEEP_LOCAL = /\b(hint|stuck|what (should|do) i do|what next|what now|next 
  * and a short situation summary) and returns only text. There is no path
  * from here to the simulation.
  */
-export async function askNola({ message, history, hits, context, getToken }: AskOptions): Promise<Reply> {
-  const fallback = builtInReply(message, hits, context);
+export async function askNola({ message, history, hits, suggestions = [], context, getToken }: AskOptions): Promise<Reply> {
+  const fallback = builtInReply(message, hits, context, suggestions);
   if (aiAvailable === false || KEEP_LOCAL.test(message)) return fallback;
 
   try {
@@ -78,7 +89,7 @@ export async function askNola({ message, history, hits, context, getToken }: Ask
         passages: hits.map((hit) => ({ title: hit.passage.title, text: hit.passage.text })),
         context: describeContext(context),
       }),
-      signal: AbortSignal.timeout(28_000),
+      signal: AbortSignal.timeout(26_000),
     });
 
     const isJson = response.headers.get('content-type')?.includes('application/json') ?? false;
@@ -89,7 +100,8 @@ export async function askNola({ message, history, hits, context, getToken }: Ask
       return fallback;
     }
     if (!response.ok) {
-      aiStatus = { state: 'off', reason: await explain(response, isJson) };
+      // A one-off failure (busy, slow, quota): say so, and try the AI again next time.
+      aiStatus = { state: 'trouble', reason: await explain(response, isJson) };
       return fallback;
     }
 
@@ -99,10 +111,10 @@ export async function askNola({ message, history, hits, context, getToken }: Ask
     // Connected, but Gemini declined this one question: use the built-in answer.
     if (typeof data.answer !== 'string' || !data.answer.trim()) return fallback;
     if (data.offTopic === true) return { text: data.answer.trim(), mood: 'thinking', sources: [], origin: 'ai' };
-    return { text: data.answer.trim(), mood: 'happy', sources: hits.slice(0, 2).map((hit) => hit.passage.source), origin: 'ai' };
+    return { text: data.answer.trim(), mood: 'happy', sources: hits.slice(0, 1).map((hit) => hit.passage.source), origin: 'ai' };
   } catch (error) {
     console.warn('AI chat unavailable, using built-in answers.', error);
-    aiStatus = { state: 'off', reason: 'the AI server could not be reached' };
+    aiStatus = { state: 'trouble', reason: 'the AI server did not answer in time' };
     return fallback;
   }
 }
