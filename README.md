@@ -180,6 +180,18 @@ Achievements are worked out from these records each time, not stored separately,
 - **The station game** copies how real systems depend on each other, but its numbers are game values, resources are shown as percentages, and time is sped up (a station day takes about 12 minutes). Machine panels label each note **Real science** or **Game simplification**. "Radiation level" is a game variable, not a real unit.
 - **Space weather** shown in the game is labelled with its source. Simulated data always says "Simulated data (not real measurements)".
 
+## Sol engine (in development, no UI yet)
+
+`src/sol/` is a separate, turn-based game-state engine for a future version of the mission game. It is not connected to any screen yet.
+
+- **Seven resources:** oxygen (kg), water (kg), food (kg), power (kWh), shielding (%), crew health (%) and research points.
+- **Each sol has three phases:** a decision phase (up to 2 decisions), an action phase played in the 3D game (which reports which tasks succeeded), and an automatic night (power, life support, food, radiation, recovery).
+- **No decision is free.** Every decision costs at least one resource other than the ones it gives, and `validateDecision` enforces this; the engine refuses to start if any decision breaks the rule. Some costs land tonight, such as a cold night after diverting heating power to the shield.
+- **Ledger.** Every change to every resource is recorded with what it gave and what it cost, including automatic night effects. The ledger always adds up to the current totals, which the tests check over a 24-sol mission.
+- **One config file.** Every number is in `src/sol/config.ts`, labelled `NASA_BASED` (with its source, for example oxygen use from NASA's BVAD or the surface dose measured by Curiosity) or `SIMPLIFIED` (a game value).
+
+Run its tests with `npx vitest run src/sol`.
+
 ## NASA data
 
 Phase 1 (now): `MockSpaceDataProvider` supplies illustrative values, always labelled as simulated.
