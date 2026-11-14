@@ -1,6 +1,7 @@
 import { LogOut } from 'lucide-react';
 import { NavLink, Outlet, useLocation } from 'react-router';
 import { Logo } from '../components/Logo';
+import { VideoBackdrop } from '../components/VideoBackdrop';
 import { AcademyProgressProvider } from '../features/academy/AcademyProgressContext';
 import { useAuth } from '../features/auth/AuthContext';
 import { AstronautAvatar } from '../features/profile/AstronautAvatar';
@@ -14,10 +15,13 @@ import { NAV_ITEMS } from './navigation';
 export function AppLayout() {
   const { profile, logout } = useAuth();
   // The game fills the whole screen; every other page sits in a centred column.
-  const fullScreen = useLocation().pathname === '/mission';
+  const { pathname } = useLocation();
+  const fullScreen = pathname === '/mission';
 
   return (
     <div className="lg:flex">
+      {/* The moving galaxy sits behind Mission Control, the app's lobby. */}
+      {pathname === '/' && <VideoBackdrop />}
       <a
         href="#main"
         className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-full focus:bg-star focus:px-5 focus:py-3 focus:font-semibold focus:text-void"
