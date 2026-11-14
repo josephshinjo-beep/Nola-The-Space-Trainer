@@ -73,6 +73,8 @@ function AlignGame({ onWin, noun }: GameProps & { noun: string }) {
             </div>
             <div ref={marker} className="absolute inset-y-0 w-2 -translate-x-1/2 bg-nola" />
           </div>
+          {/* The only action in a timing game: focus it so keyboard players can press Space straight away. */}
+          {/* oxlint-disable-next-line jsx-a11y/no-autofocus */}
           <Button autoFocus onClick={() => attempt(position.current)}>
             Stop!
           </Button>

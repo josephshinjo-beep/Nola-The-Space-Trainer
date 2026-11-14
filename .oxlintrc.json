@@ -1,0 +1,57 @@
+// Lint rules for NOLA (run with `npm run lint`).
+// Rules switched off, and why:
+// vitest/valid-expect: Vitest accepts a message as expect's second argument; the tests use it.
+// vitest/require-mock-type-parameters: style only.
+// import/default, import/no-named-as-default-member: Phaser's types use `export =`; its default import works.
+// import/no-unassigned-import: CSS and font imports are meant to be unassigned.
+// no-underscore-dangle: __APP_VERSION__ is a build-time constant.
+// jsx-a11y/prefer-tag-over-role: role=status on a paragraph is valid; <output> is meant for form results.
+// react/set-state-in-effect: the app resets state when a key value changes (user, module) and loads data in effects, on purpose.
+// react/exhaustive-effect-dependencies: some effects deliberately re-run on a value (focus a new lesson stage, scroll to new messages); react-hooks/exhaustive-deps stays on.
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": [
+    "typescript",
+    "react",
+    "react-hooks",
+    "jsx-a11y",
+    "import",
+    "vitest"
+  ],
+  "env": {
+    "browser": true,
+    "node": true,
+    "es2024": true
+  },
+  "categories": {
+    "correctness": "error",
+    "suspicious": "warn"
+  },
+  "rules": {
+    "react-hooks/rules-of-hooks": "error",
+    "react-hooks/exhaustive-deps": "warn",
+    "react/react-in-jsx-scope": "off",
+    "no-unused-vars": [
+      "error",
+      {
+        "argsIgnorePattern": "^_",
+        "varsIgnorePattern": "^_",
+        "destructuredArrayIgnorePattern": "^_"
+      }
+    ],
+    "vitest/valid-expect": "off",
+    "vitest/require-mock-type-parameters": "off",
+    "import/default": "off",
+    "import/no-named-as-default-member": "off",
+    "import/no-unassigned-import": "off",
+    "no-underscore-dangle": "off",
+    "jsx-a11y/prefer-tag-over-role": "off",
+    "react/set-state-in-effect": "off",
+    "react/exhaustive-effect-dependencies": "off"
+  },
+  "ignorePatterns": [
+    "dist/**",
+    "node_modules/**",
+    "public/**"
+  ]
+}

@@ -63,6 +63,25 @@ function appVersion(): string {
 export default defineConfig({
   plugins: [react(), tailwindcss(), localApi()],
   define: { __APP_VERSION__: JSON.stringify(appVersion()) },
+  build: {
+    rolldownOptions: {
+      output: {
+        // Libraries go in their own files. They change far less often than
+        // the app's code, so after an update browsers keep them cached and
+        // only download the app's own (small) files again.
+        codeSplitting: {
+          groups: [
+            { name: 'firebase', test: /node_modules[\\/](@firebase|firebase|re2js)[\\/]/, priority: 20 },
+            { name: 'react', test: /node_modules[\\/](react|react-dom|react-router|scheduler)[\\/]/, priority: 20 },
+            { name: 'phaser', test: /node_modules[\\/]phaser[\\/]/, priority: 20 },
+          ],
+        },
+      },
+    },
+    // Phaser (the game engine, about 1.2 MB) is the only file above the
+    // default 500 kB warning. It is loaded only when the game is opened.
+    chunkSizeWarningLimit: 1300,
+  },
   test: {
     include: ['src/**/*.test.ts'],
   },

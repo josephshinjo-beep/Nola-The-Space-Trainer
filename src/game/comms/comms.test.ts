@@ -139,8 +139,8 @@ describe('training questions', () => {
     for (const [fault, procedure] of Object.entries(PROCEDURES)) {
       expect(procedure.options.filter((option) => option.correct), fault).toHaveLength(1);
       for (const option of procedure.options) expect(option.why.length, `${fault}: ${option.text}`).toBeGreaterThan(20);
-      if (fault === 'antenna') expect(procedure.earthReply).toBe('');
-      else expect(procedure.earthReply).toMatch(/^Mission Control:/);
+      // Nobody on Earth can hear a crew whose antenna is broken.
+      expect(procedure.earthReply, fault).toMatch(fault === 'antenna' ? /^$/ : /^Mission Control:/);
     }
   });
 });

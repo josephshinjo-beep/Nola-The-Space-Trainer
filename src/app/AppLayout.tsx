@@ -1,5 +1,5 @@
-import { LogOut } from 'lucide-react';
-import { NavLink, Outlet, useLocation } from 'react-router';
+import { Database, LogOut } from 'lucide-react';
+import { Link, NavLink, Outlet, useLocation } from 'react-router';
 import { Logo } from '../components/Logo';
 import { VideoBackdrop } from '../components/VideoBackdrop';
 import { AcademyProgressProvider } from '../features/academy/AcademyProgressContext';
@@ -55,6 +55,9 @@ export function AppLayout() {
           </ul>
         </nav>
 
+        <Link to="/data-sources" className="mb-3 flex min-h-11 items-center gap-2 rounded-full px-4 text-sm font-semibold text-mist hover:text-star">
+          <Database aria-hidden="true" size={18} /> Data sources
+        </Link>
         <div className="rounded-2xl border-2 border-line bg-void/50 p-4">
           <div className="flex items-center gap-3">
             {profile && <AstronautAvatar avatar={profile.avatar} size={44} className="shrink-0" />}

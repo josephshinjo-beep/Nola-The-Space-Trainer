@@ -5,18 +5,34 @@ import { AuthProvider } from '../features/auth/AuthContext';
 import { LoginPage } from '../features/auth/LoginPage';
 import { RegisterPage } from '../features/auth/RegisterPage';
 import { ResetPasswordPage } from '../features/auth/ResetPasswordPage';
-import { AcademyPage } from '../pages/AcademyPage';
-import { AccessibilityPage } from '../pages/AccessibilityPage';
-import { CompanionPage } from '../pages/CompanionPage';
 import { MissionControlPage } from '../pages/MissionControlPage';
-import { ModulePage } from '../pages/ModulePage';
-import { LessonPage } from '../pages/LessonPage';
 import { NotFoundPage } from '../pages/NotFoundPage';
-import { ProfilePage } from '../pages/ProfilePage';
 import { AppLayout } from './AppLayout';
 import { ProtectedRoute, PublicOnlyRoute } from './RouteGuards';
 
+// Pages load the first time they are visited, so the first screen downloads
+// less. The home page and the sign-in pages stay in the main bundle.
 const MissionPage = lazy(() => import('../pages/MissionPage'));
+const AcademyPage = lazy(() => import('../pages/AcademyPage').then((m) => ({ default: m.AcademyPage })));
+const ModulePage = lazy(() => import('../pages/ModulePage').then((m) => ({ default: m.ModulePage })));
+const LessonPage = lazy(() => import('../pages/LessonPage').then((m) => ({ default: m.LessonPage })));
+const CompanionPage = lazy(() => import('../pages/CompanionPage').then((m) => ({ default: m.CompanionPage })));
+const ProfilePage = lazy(() => import('../pages/ProfilePage').then((m) => ({ default: m.ProfilePage })));
+const AccessibilityPage = lazy(() => import('../pages/AccessibilityPage').then((m) => ({ default: m.AccessibilityPage })));
+const DataSourcesPage = lazy(() => import('../pages/DataSourcesPage').then((m) => ({ default: m.DataSourcesPage })));
+
+/** Shows a short message while a page's code downloads. */
+const page = (element: React.ReactNode) => (
+  <Suspense
+    fallback={
+      <p role="status" className="p-6 text-xl text-mist">
+        Loading…
+      </p>
+    }
+  >
+    {element}
+  </Suspense>
+);
 
 /** The route map: which page shows at which address, and who may see it. */
 export default function App() {
@@ -34,23 +50,17 @@ export default function App() {
             <Route element={<ProtectedRoute />}>
               <Route element={<AppLayout />}>
                 <Route index element={<MissionControlPage />} />
-                <Route path="/academy" element={<AcademyPage />} />
-                <Route path="/academy/:moduleId" element={<ModulePage />} />
-                <Route path="/academy/:moduleId/lesson" element={<LessonPage />} />
-                <Route
-                  path="/mission"
-                  element={
-                    <Suspense fallback={<p className="p-6 text-xl text-mist">Loading…</p>}>
-                      <MissionPage />
-                    </Suspense>
-                  }
-                />
-                <Route path="/companion" element={<CompanionPage />} />
-                <Route path="/profile" element={<ProfilePage />} />
+                <Route path="/academy" element={page(<AcademyPage />)} />
+                <Route path="/academy/:moduleId" element={page(<ModulePage />)} />
+                <Route path="/academy/:moduleId/lesson" element={page(<LessonPage />)} />
+                <Route path="/mission" element={page(<MissionPage />)} />
+                <Route path="/companion" element={page(<CompanionPage />)} />
+                <Route path="/profile" element={page(<ProfilePage />)} />
               </Route>
             </Route>
 
-            <Route path="/accessibility" element={<AccessibilityPage />} />
+            <Route path="/accessibility" element={page(<AccessibilityPage />)} />
+            <Route path="/data-sources" element={page(<DataSourcesPage />)} />
             <Route path="*" element={<NotFoundPage />} />
           </Routes>
         </SettingsProvider>

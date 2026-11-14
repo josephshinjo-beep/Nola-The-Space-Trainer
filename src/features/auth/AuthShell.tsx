@@ -1,4 +1,4 @@
-import { Accessibility } from 'lucide-react';
+import { Accessibility, Database } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { Logo } from '../../components/Logo';
@@ -27,6 +27,10 @@ export function AuthShell({ title, nolaMessage, mood = 'happy', children }: Auth
         >
           <Accessibility aria-hidden="true" size={20} />
           Accessibility
+        </Link>
+        <Link to="/data-sources" className="inline-flex min-h-11 items-center gap-2 rounded-full border-2 border-line px-4 font-semibold text-mist transition hover:border-glow hover:text-star">
+          <Database aria-hidden="true" size={20} />
+          Data sources
         </Link>
       </header>
 

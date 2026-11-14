@@ -1,3 +1,4 @@
+import { Link } from 'react-router';
 import { useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { Button } from '../components/Button';
 import { ConfirmDialog } from '../components/ConfirmDialog';
@@ -178,6 +179,12 @@ export function ProfilePage() {
       <Panel title="Learning history">
         <LearningHistoryPanel />
       </Panel>
+
+      <p className="text-center text-lg">
+        <Link to="/data-sources" className="font-semibold text-glow underline">
+          Where NOLA’s data comes from: NASA datasets, and which numbers are real
+        </Link>
+      </p>
 
       <Panel title="Accessibility">
         <SettingsPanel />

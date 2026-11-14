@@ -187,11 +187,14 @@ export function Joystick({ bridge }: { bridge: GameBridge }) {
       x /= length;
       y /= length;
     }
+    // The bridge is the game's input channel: writing to it is how the joystick talks to Phaser.
+    // oxlint-disable-next-line react/immutability
     bridge.input = { x, y };
     setKnob({ x, y });
   }
 
   function release() {
+    // oxlint-disable-next-line react/immutability
     bridge.input = { x: 0, y: 0 };
     setKnob({ x: 0, y: 0 });
   }

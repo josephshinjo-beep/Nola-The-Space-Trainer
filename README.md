@@ -2,9 +2,26 @@
 
 **LEARN • EXPLORE • ACHIEVE**
 
-An educational space-survival platform for ages 10–16. Students learn how humans stay alive in space in the **NOLA Academy**, then put each lesson to work running their own space station in **NOLA Mission**, with the robot companion **NOLA** helping along the way.
+An educational space-survival game for ages 10–16. Students learn how humans stay alive in space in the **NOLA Academy**, then run their own Mars base in **NOLA Mission**, with the robot companion **NOLA** helping along the way.
 
-The central idea: **learning unlocks the game.** Each Academy module a student passes switches on one system of their station.
+The central idea: **learning unlocks the game.** Each Academy module a student passes switches on one system of their base. Every day on the base is a trade-off, decided with real NASA data: real solar storms, real radio delays to Earth, and real astronaut-health research.
+
+## 60-second demo script
+
+**Before you start:** sign in with a demo account whose eight Academy modules are passed (or pass them; each takes a few minutes). Play the tutorial sol and one more sol, so the next sol (sol 3) brings a radiation storm. Have `/data-sources` open in a second tab.
+
+| Time | Do this | Say this |
+|---|---|---|
+| 0:00 | **Mission Control** (the home page). | "NOLA teaches kids how astronauts stay alive. Every lesson they pass switches on a system of their space base." |
+| 0:07 | **NOLA Academy** → open a module, scroll the six stages. | "Each lesson: NOLA introduces it, cards, a hands-on activity, a quiz and a mission challenge. Pass it, and the station gets a new room." |
+| 0:14 | **NOLA Mission** → press **Map** → **Command Console** → **Use**. | "Each sol on Mars starts with a plan. Every plan gives something and costs something. No choice is free." |
+| 0:20 | Press the **?** next to any resource on a card. | "Every resource has an explainer that reads aloud, with a real-science fact and a button to ask NOLA more." Close it, press **Choose this plan**, then **Go and do it**. |
+| 0:27 | The **Radiation Storm** banner appears. Point at the date. | "This storm is based on a real solar event, pulled live from NASA's DONKI database. The countdown runs. Reinforce the shield with power and water, or shelter and lose science time?" Press **Shelter the crew**. |
+| 0:36 | **Map** → **Antenna Console** → **Use**. | "Where's your base? The Moon is 1.3 light-seconds from Earth. Mars is 3 to 22 light-minutes away; today's value is calculated from where the planets really are. When something breaks, you can ask Mission Control and wait, while the leak keeps draining your water, or act on your training." |
+| 0:45 | **Map** → the urgent job's machine → **Do the urgent job**, then **Command Console** → **End the sol**. | "End of the day: what your plan gave, what it cost, and how every store changed overnight. When crew health changes, an Astronaut Science card cites a real NASA study, here from NASA's Open Science Data Repository." |
+| 0:54 | Switch to the **Data sources** tab. | "Every NASA dataset is listed, and every number is marked real or game value. At the end of a mission, the debrief scores survival and good reasoning, not just what's left in the tanks." |
+
+If the storm has already passed, skip that row and show the storm text on the Data sources page instead.
 
 ## What is in the app
 
@@ -12,9 +29,10 @@ The central idea: **learning unlocks the game.** Each Academy module a student p
 |---|---|
 | **Mission Control** | Dashboard: NOLA's greeting, the student's astronaut, training progress, and which station systems are online |
 | **NOLA Academy** | Eight modules. Each lesson has six stages: NOLA Introduces, Learn, Explore (a hands-on activity), Knowledge Check (quiz), Mission Challenge, Unlock |
-| **NOLA Mission** | A top-down 2D space station to walk around. Nine rooms, twelve machines, eight missions, repair mini-games, solar storms, and food, water, oxygen and energy to manage |
-| **Ask NOLA** | Chat with the companion. Answers come from the lesson content, with an optional AI model behind a secure backend |
-| **Astronaut Profile** | Avatar editor, achievements, learning history, accessibility settings, restart options |
+| **NOLA Mission** | A top-down 2D Mars base. A 30-sol mission: a plan each morning at the Command Console, urgent jobs at the machines, and a night that uses up air, water, food and power. Radiation storms from real NASA solar events, radio delays to Earth, crew muscles and rest, repair mini-games, a tutorial sol, a summary each evening and a debrief at the end |
+| **Ask NOLA** | Chat with the companion. A calculator for space maths, answers from the lessons and a 541-entry space corpus, and an optional AI model behind a secure backend, limited to space topics |
+| **Astronaut Profile** | Avatar editor, rank (Cadet to Commander), concept badges, achievements, learning history, accessibility settings, restart options |
+| **Data sources** | Every NASA dataset used, and every game number marked real or simplified (open to everyone at `/data-sources`) |
 
 ### How lessons unlock the station
 
@@ -25,11 +43,23 @@ The central idea: **learning unlocks the game.** Each Academy module a student p
 | 3. Water and Recycling | Water Recycling |
 | 4. Food and Agriculture | Hydroponics Lab |
 | 5. Energy and Electricity | Power Bay (solar panels and batteries) |
-| 6. Radiation Protection | Radiation Shelter and solar storms |
+| 6. Radiation Protection | Radiation Shelter, solar storms and real-event radiation storms |
 | 7. Temperature and Life Support | Thermal Control |
 | 8. Space Communication and Emergencies | Comms Room |
 
 Modules open in order. A module is complete when its quiz is passed (4 of 5) and its mission challenge is solved. Until a system is unlocked, NOLA runs it on autopilot so it cannot hurt the crew.
+
+## Real NASA data at a glance
+
+| NASA source | Used for | How |
+|---|---|---|
+| **DONKI** (solar flares, CMEs, solar particle events) | Radiation Storm warnings with the real event's date and type | Live from `api.nasa.gov` (with `NASA_API_KEY`) or NASA's keyless DONKI-API 2.0; 84 recorded real events bundled for offline use |
+| **DONKI** space-weather summary | The Radiation Monitor reading and how often station storms happen | Optional (`VITE_SPACE_DATA_SOURCE=nasa`); clearly labelled simulated data otherwise |
+| **OSDR** (Open Science Data Repository) | Astronaut Science cards: muscle and bone, exercise, body clock, radiation (8 studies, each cited) | Checked live against OSDR's study search API; saved copy with citations as backup |
+| **JPL** approximate planet positions | Today's real Earth–Mars radio delay (3–22 minutes each way) | Calculated in the browser; tested against NASA's recorded closest approaches |
+| **BVAD**, Mars and Planetary Fact Sheets, Curiosity RAD, NASA-STD-3001 | Daily oxygen, water and food use, the length of a sol, the Mars radiation dose, the career radiation limit, the calculator | Built-in reference values, each with its source in `src/sol/config.ts` |
+
+The **Data sources** page (`/data-sources`) lists every source with its exact API calls, and all 95 numbers in the Mars mission: 7 real NASA values and 88 game values, read straight from the config so the page can never drift from the game. Anything simulated is labelled "Simulated data (not real measurements)", and storms based on real events always say "Game mechanic, not a radiation forecast".
 
 ## Getting started
 
@@ -51,9 +81,9 @@ npm run dev
 
 Open the address it prints (usually http://localhost:5173).
 
-The two server functions in `api/` also run under `npm run dev`. To use the AI chat locally, add `OPENROUTER_API_KEY=your-key` (or `GEMINI_API_KEY=your-key`) to `.env.local` and restart the dev server. Without a key, NOLA uses its built-in answers.
+The server functions in `api/` also run under `npm run dev`. To use the AI chat locally, add `OPENROUTER_API_KEY=your-key` (or `GEMINI_API_KEY=your-key`) to `.env.local` and restart the dev server. Without a key, NOLA uses its built-in answers. NASA data needs no key (see `NASA_API_KEY` below).
 
-**Checking the AI set-up:** open `/api/chat?test=1` to also send the AI one tiny real question and see the answer, the model, the time it took, or the service's exact error. Open `/api/chat` in a browser (for example http://localhost:5173/api/chat, or the same path on your deployed site). It reports whether the key is set, whether Google accepts it and which model will be used. It never shows the key. The Ask NOLA page shows the app version at the bottom, so you can check the site is running the latest code. The page also shows a line under the chat saying whether the AI is connected and, if not, why.
+**Checking the AI set-up:** open `/api/chat` in a browser (for example http://localhost:5173/api/chat, or the same path on your deployed site). It reports whether a key is set, whether the AI service accepts it and which model will be used. It never shows the key. Open `/api/chat?test=1` to also send one tiny real question and see the answer, the model, the time it took, or the service's exact error. The Ask NOLA page shows the app version at the bottom, so you can check the site is running the latest code.
 
 ### One-time Firebase console setup
 
@@ -65,15 +95,24 @@ The two server functions in `api/` also run under `npm run dev`. To use the AI c
 
 | Command | What it does |
 |---|---|
-| `npm run dev` | Start the development server with live reload |
+| `npm run dev` | Start the development server with live reload (also runs the `api/` functions) |
 | `npm run build` | Type-check and build the production site into `dist/` |
 | `npm run preview` | Serve the production build locally |
+| `npm run lint` | Lint with [oxlint](https://oxc.rs) (TypeScript, React hooks, accessibility and test rules); any warning fails |
 | `npm run typecheck` | Check TypeScript types only |
-| `npm test` | Run the unit tests |
+| `npm test` | Run the unit tests (Vitest) |
+
+Before a pull request, run all three checks:
+
+```bash
+npm run lint && npm test && npm run build
+```
+
+Lint uses oxlint rather than ESLint because `typescript-eslint` does not support TypeScript 7 yet. The rules switched off, and why, are listed at the top of [`.oxlintrc.json`](.oxlintrc.json).
 
 ## Deploying to Vercel
 
-Vercel hosts the website and runs the two small server functions in `api/`.
+Vercel hosts the website and runs the server functions in `api/`.
 
 1. Push this repository to GitHub and import it at [vercel.com/new](https://vercel.com/new). Vercel detects Vite automatically.
 2. Under **Settings → Environment Variables**, add:
@@ -86,7 +125,7 @@ Vercel hosts the website and runs the two small server functions in `api/`.
 | `OPENROUTER_MODEL` | AI chat (optional) | One free model id, or several separated by commas, to try first. Otherwise a few quiet free models are tried in turn (see `api/chat.ts`), and if those are gone the server picks quiet free models from OpenRouter's current list |
 | `GEMINI_API_KEY` | AI chat (alternative) | Secret, from [Google AI Studio](https://aistudio.google.com/apikey). Used only when no OpenRouter key is set |
 | `AI_MODEL` | AI chat (optional) | A Gemini model name to try first when using Gemini |
-| `VITE_SPACE_DATA_SOURCE` | Real NASA data (optional) | Set to `nasa` to use NASA data; leave unset for simulated data |
+| `VITE_SPACE_DATA_SOURCE` | Real NASA data (optional) | Set to `nasa` to use NASA data for the space-weather summary; leave unset for simulated data |
 | `NASA_API_KEY` | Real NASA data (optional) | Secret. Free from [api.nasa.gov](https://api.nasa.gov). Radiation storms try api.nasa.gov first with it, and work without it through NASA's keyless DONKI web service. The space-weather summary uses NASA's low-limit `DEMO_KEY` without it |
 
 3. Deploy.
@@ -96,6 +135,16 @@ Variables that start with `VITE_` are built into the website and are visible to 
 
 After changing a variable in Vercel you must **redeploy**: existing deployments keep the old values.
 
+## Performance
+
+Measured on the production build in headless Chrome:
+
+- **First load is small.** Every page except Mission Control and the sign-in pages is downloaded the first time it is visited. The app's own main file is 46 kB (it was 901 kB before the pages were split), and the login page downloads about 900 kB of JavaScript and CSS in total, most of it Firebase.
+- **Libraries are cached separately.** Firebase (646 kB), React (256 kB) and Phaser (1.2 MB) are in their own files. They change much less often than the app's code, so after an update returning players download only the small app files again. Phaser loads only when the game is opened.
+- **The game rests when it is hidden.** While a panel or menu covers the game, the Phaser loop sleeps and wakes when the panel closes. Main-thread work with a panel open fell from about 4.5 seconds to 0.15 seconds per 10 seconds.
+- **The station's own code is light.** With the game running, the app's JavaScript uses about 5% of the main thread; the rest is the browser drawing the full-screen canvas, which a real device's graphics chip handles far more cheaply than the headless test.
+- NASA and OSDR answers are cached on the server (30 minutes and 24 hours) and by Vercel's CDN, so a busy classroom does not send one request per student.
+
 ## How it is built
 
 ### Technology
@@ -104,9 +153,9 @@ After changing a variable in Vercel you must **redeploy**: existing deployments 
 - **Tailwind CSS** – styling, with NOLA's colours and fonts defined once in `src/index.css`.
 - **Phaser 3** – the 2D game. Downloaded only when the Mission page is opened.
 - **Firebase Authentication + Cloud Firestore** – accounts and each student's data.
-- **Vercel functions** – two small server programs: the AI chat and the NASA data fetch.
+- **Vercel functions** – four small server programs: the AI chat, the NASA space-weather summary, real solar events for radiation storms, and the live check of the OSDR studies.
 - **OpenRouter (free models) or Google Gemini** – the optional AI model behind NOLA's chat, called only from the server.
-- **Vitest** – unit tests.
+- **Vitest** – unit tests. **oxlint** – linting.
 - **Self-hosted fonts** (Fredoka, Nunito, Lexend) and the **browser's own speech voice** for read-aloud, so a children's app sends nothing to font or speech services.
 
 ### The four parts that are kept apart
@@ -138,10 +187,10 @@ After changing a variable in Vercel you must **redeploy**: existing deployments 
 
 ```
 api/
-├── chat.ts            AI backend for Ask NOLA (server only)
-├── astronaut-science.ts  Live check of the NASA OSDR studies behind the Astronaut Science cards (server only)
-├── space-events.ts    Real solar events from NASA DONKI for radiation storms (server only)
-└── space-weather.ts   NASA DONKI fetch and conversion (server only)
+├── chat.ts               AI backend for Ask NOLA (server only)
+├── astronaut-science.ts  Live check of the NASA OSDR studies behind the Astronaut Science cards
+├── space-events.ts       Real solar events from NASA DONKI for radiation storms
+└── space-weather.ts      NASA DONKI space-weather summary
 src/
 ├── app/               Route map, page frame, route guards
 ├── pages/             One file per page
@@ -154,11 +203,16 @@ src/
 │   ├── unlocks/         Lesson Unlock Manager
 │   ├── companion/       NOLA mascot, knowledge search, built-in replies, chat service
 │   ├── profile/         Avatar and progress panels
+│   ├── science/         Astronaut Science card
 │   └── accessibility/   Settings and read-aloud
-├── simulation/        The engine: types, config, rules, missions
+├── simulation/        The station engine: types, config, rules, missions
+├── sol/               The sol engine: 7 resources, decisions, ledger, storms, crew body (one config file)
 ├── game/              Phaser scene, station map, GameBridge, simulation clock
-│   └── hud/             Resource bars, mission list, machine panels, mini-games, map
-├── data/              Space data providers, validation, space-weather model
+│   ├── hud/             Resource bars, mission list, machine panels, mini-games, map
+│   ├── sol/             Decision cards, sol flow, storm banner, tutorial, explainers
+│   ├── comms/           Moon and Mars signal delay, Mission Control, training questions
+│   └── progress/        Score, debrief, badges, ranks
+├── data/              NASA data (DONKI, OSDR), saved copies, validation, Data sources list
 ├── services/          Firebase start-up and Firestore repositories
 └── types/
 firestore.rules        Database access rules
@@ -171,9 +225,11 @@ docs/reference/        Design reference artwork (not shipped)
 users/{uid}                       profile: nickname, avatar, accessibility settings
 users/{uid}/academy/{moduleId}    lesson stage, quiz scores, attempts, completion
 users/{uid}/simulation/current    the saved station game
+users/{uid}/simulation/sol        the saved Mars mission (sols, decisions, ledger)
+users/{uid}/simulation/record     earned concept badges, best score, missions completed
 ```
 
-Achievements are worked out from these records each time, not stored separately, so a badge can never disagree with the real record. Chat messages are not saved.
+Achievements are worked out from these records each time, so they never disagree with the real record. Concept badges and the best score are also kept in `record`, so restarting the station does not take them away (restarting the whole course does). Chat messages are not saved.
 
 ## Science and honesty
 
@@ -279,17 +335,17 @@ If all of that fails, the app uses `src/data/spaceEventsArchive.ts`: 84 real pas
 
 The station game's own random storms (from the space-weather summary) still exist separately for now.
 
-## NASA data
+## NASA space-weather summary
 
-Phase 1 (now): `MockSpaceDataProvider` supplies illustrative values, always labelled as simulated.
+By default, `MockSpaceDataProvider` supplies illustrative values for the Radiation Monitor, always labelled as simulated. (Radiation Storms, Astronaut Science and the Mars delay use real data regardless; see the sections above.)
 
-Phase 2 (ready to switch on): `NasaDonkiProvider` reads real events from NASA's [DONKI](https://kauai.ccmc.gsfc.nasa.gov/DONKI/) space-weather database through `api/space-weather.ts`: the strongest recent solar flare, the highest Kp index and the number of solar particle events over the past seven days. Set `VITE_SPACE_DATA_SOURCE=nasa` to use it. If NASA cannot be reached or returns something unexpected, the app falls back to simulated data and says so.
+Ready to switch on: `NasaDonkiProvider` reads real events from NASA's [DONKI](https://kauai.ccmc.gsfc.nasa.gov/DONKI/) space-weather database through `api/space-weather.ts`: the strongest recent solar flare, the highest Kp index and the number of solar particle events over the past seven days. Set `VITE_SPACE_DATA_SOURCE=nasa` to use it. If NASA cannot be reached or returns something unexpected, the app falls back to simulated data and says so.
 
 - **Real:** the NOAA R scale (from flare X-ray class) and G scale (from Kp) used in `spaceWeatherModel.ts`.
 - **Ours:** how those scales change the game. More solar activity makes storms more frequent and stronger. This is a game mechanic, not a radiation forecast.
 - **Not provided by NASA, and not invented:** food, water, oxygen or battery levels. Those come only from the simulation.
 
-**Status:** the NASA adapter is covered by unit tests using sample responses in DONKI's documented format. It has not been run against the live NASA service, because the build environment could not reach it. Check it once on your deployment before relying on it.
+**Status:** this summary adapter is covered by unit tests using sample responses in DONKI's documented format, but has not been run against the live service. (The radiation-storm route has: it was checked live against DONKI-API 2.0.) Check it once on your deployment before relying on it.
 
 To add another dataset during the hackathon: write a provider that returns `EnvironmentalData` (extend that type if you need new fields), validate it, and extend `summarizeSpaceWeather` to turn the new measurements into engine inputs.
 
@@ -319,7 +375,7 @@ Safety measures:
 
 Known limits: the rate limit is kept in server memory, so it is a first defence, not a guarantee; set a quota or budget on the key in your Google account. The lesson passages are chosen in the browser and sent with the question; a student who tampers with them can only affect their own answer. Moving the search to the server with a vector database is the natural upgrade if the knowledge base grows beyond the lessons.
 
-**Status:** the request checks, the sign-in check, the request sent to Gemini, the off-topic handling and every fallback path are unit-tested against simulated Gemini and OpenRouter responses. The call to the real Gemini service has not been run, because no API key was available during the build. Test it once after adding `GEMINI_API_KEY`.
+**Status:** the request checks, the sign-in check, the off-topic handling and every fallback path are unit-tested against simulated Gemini and OpenRouter responses. The OpenRouter path has been run live with a free-tier key. The Gemini path has not, so test it once with `/api/chat?test=1` after adding `GEMINI_API_KEY`.
 
 ## Accessibility
 
@@ -330,7 +386,8 @@ Known limits: the rate limit is kept in server memory, so it is a first defence,
 - The game can be played without steering: the Map lists every machine and takes the astronaut straight to it.
 - Everything in the game canvas is also described in ordinary page content: current room, nearby machine, mission tasks, resources and warnings.
 - Repair mini-games have no time limit, except the alignment game, which becomes a no-rush dial when reduced motion is on.
-- Status is never shown by colour alone: there is always a word or an icon as well ("LOW", "Locked", ticks and crosses).
+- Status is never shown by colour alone: there is always a word or an icon as well ("LOW", "Locked", up and down arrows, ticks and locks). A **Colour-blind friendly colours** setting also swaps green and red for blue and amber.
+- Lint includes the `jsx-a11y` accessibility rules.
 
 Not yet done: testing with real screen-reader users and on a range of real phones.
 
@@ -342,7 +399,7 @@ If this goes beyond a hackathon demo to real children, get proper advice on chil
 
 ## Testing
 
-`npm test` runs the unit tests, which cover:
+`npm test` runs the unit tests (235 at the time of writing), which cover:
 
 - The simulation engine: every resource rule, missions, faults, storms, failure and recovery, save and load, and a long randomised run checking all values stay in range.
 - The Lesson Unlock Manager and the Academy progress rules.
@@ -355,6 +412,7 @@ If this goes beyond a hackathon demo to real children, get proper advice on chil
 - The DONKI events route on real recorded NASA data (which events count, host order with and without a key, caching, the 502 answer), the offline archive, and the radiation storm rules (costs, harm, one storm at a time, old saves).
 - The AI backend's request checks and sign-in check.
 - The station map (every machine reachable, locked doors block).
+- The Data sources page: every sol-engine number is listed and labelled, every NASA URL the server code fetches is named, and every file it points to exists.
 
 ## Adding content
 

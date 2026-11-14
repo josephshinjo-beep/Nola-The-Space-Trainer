@@ -32,7 +32,15 @@ export default function PhaserGame({ bridge }: { bridge: GameBridge }) {
       game.canvas.setAttribute('role', 'img');
       game.canvas.setAttribute('aria-label', 'Top-down view of your space station. Your location, nearby equipment and mission tasks are described in the panels around it.');
     }, 0);
+    // While a panel or menu covers the game, stop drawing it: nobody can see
+    // it, and redrawing a full-screen canvas 60 times a second costs battery.
+    const stopListening = bridge.onPauseChange((paused) => {
+      if (!game) return;
+      if (paused) game.loop.sleep();
+      else game.loop.wake();
+    });
     return () => {
+      stopListening();
       clearTimeout(timer);
       game?.destroy(true);
     };

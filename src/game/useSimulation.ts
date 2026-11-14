@@ -36,9 +36,12 @@ export function useSimulation(uid: string | undefined, unlocked: readonly System
   const paused = useRef(false);
   const dirty = useRef(false);
   const inputs = useRef(getInputs);
-  inputs.current = getInputs;
   const unlockedRef = useRef(unlocked);
-  unlockedRef.current = unlocked;
+  // Keep the latest values for the clock and unlock effects without restarting them.
+  useEffect(() => {
+    inputs.current = getInputs;
+    unlockedRef.current = unlocked;
+  });
 
   const commit = useCallback((next: StationState) => {
     if (next === current.current) return;

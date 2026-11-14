@@ -43,8 +43,24 @@ export interface GameView {
 export class GameBridge {
   /** Movement from the on-screen joystick, each axis from -1 to 1. */
   input = { x: 0, y: 0 };
-  /** While true the astronaut stands still (a panel or menu is open). */
-  paused = false;
+  private isPaused = false;
+  private pauseListeners = new Set<(paused: boolean) => void>();
+
+  /** While true the astronaut stands still (a panel or menu covers the game). */
+  get paused(): boolean {
+    return this.isPaused;
+  }
+  set paused(value: boolean) {
+    if (value === this.isPaused) return;
+    this.isPaused = value;
+    this.pauseListeners.forEach((listener) => listener(value));
+  }
+
+  /** Told whenever the game is paused or resumed. */
+  onPauseChange(listener: (paused: boolean) => void): () => void {
+    this.pauseListeners.add(listener);
+    return () => this.pauseListeners.delete(listener);
+  }
   /** Set by React to move the astronaut next to a machine; cleared by the scene. */
   travelTo: EquipmentId | null = null;
 

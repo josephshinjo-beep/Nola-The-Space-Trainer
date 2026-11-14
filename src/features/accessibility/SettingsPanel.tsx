@@ -47,6 +47,7 @@ function Toggle({ label, hint, checked, onChange }: ToggleProps) {
           role="switch"
           className="sr-only"
           checked={checked}
+          aria-checked={checked}
           aria-describedby={`${id}-hint`}
           onChange={(event) => onChange(event.target.checked)}
         />

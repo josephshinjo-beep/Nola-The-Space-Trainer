@@ -325,7 +325,7 @@ export class StationScene extends Phaser.Scene {
     if (!bridge.view.reducedMotion) {
       const bob = Math.sin(time / 250) * 4;
       for (const sprite of this.sprites) {
-        sprite.alert.list[0] && sprite.alert.setScale(1 + Math.sin(time / 200) * 0.08);
+        if (sprite.alert.list[0]) sprite.alert.setScale(1 + Math.sin(time / 200) * 0.08);
         sprite.arrow.y = (sprite.item.y + 0.5) * TILE + (sprite.item.y < ROWS / 2 ? 82 : -82) + bob;
       }
       if (bridge.view.storm) this.stormOverlay.setAlpha(0.7 + Math.sin(time / 400) * 0.3);

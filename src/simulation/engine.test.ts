@@ -78,10 +78,9 @@ describe('lesson content', () => {
         expect(new Set(q.options).size).toBe(4);
       }
       for (const s of lesson.challenge.steps) expect(s.options.filter((o) => o.correct)).toHaveLength(1);
-      if (lesson.explore.kind === 'sort') {
-        const bins = lesson.explore.bins.map((b) => b.id);
-        for (const item of lesson.explore.items) expect(bins).toContain(item.bin);
-      }
+      const explore = lesson.explore;
+      const sortPairs = explore.kind === 'sort' ? explore.items.map((item) => [item.bin, explore.bins.map((b) => b.id)] as const) : [];
+      for (const [bin, bins] of sortPairs) expect(bins).toContain(bin);
     }
   });
 
