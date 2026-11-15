@@ -128,7 +128,10 @@ export function ProfilePage() {
             </div>
             <div>
               <dt className="text-sm font-bold uppercase tracking-widest text-mist">Login email</dt>
-              <dd className="mt-1 text-lg [overflow-wrap:anywhere]">{user?.email ?? '…'}</dd>
+              <dd className="mt-1 text-lg [overflow-wrap:anywhere]">
+                {/* A guest has no email (Firebase anonymous sign-in), so say so instead of showing a loading mark forever. */}
+                {user?.isAnonymous ? <span className="text-mist">None yet: you're a guest. Choose "Guest mode (test)" to create an account and keep your progress.</span> : (user?.email ?? '…')}
+              </dd>
             </div>
             <div>
               <dt className="text-sm font-bold uppercase tracking-widest text-mist">Crew member since</dt>
