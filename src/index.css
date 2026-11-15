@@ -1,5 +1,15 @@
 @import "tailwindcss";
 
+/* "compact:" = phones: narrow portrait screens and short landscape ones. The game HUD shrinks there. */
+@custom-variant compact {
+  @media (max-width: 639px) {
+    @slot;
+  }
+  @media (max-height: 500px) {
+    @slot;
+  }
+}
+
 /*
  * NOLA design tokens.
  * Deep-space blues for surfaces, with NOLA's own colours as accents:

@@ -143,6 +143,9 @@ const hash = (x: number, y: number) => {
   return ((h ^ (h >>> 16)) >>> 0) / 4294967296;
 };
 
+/** A touch screen (no keyboard to press E on). */
+const TOUCH = typeof window !== 'undefined' && window.matchMedia('(pointer: coarse)').matches;
+
 export class Station3D {
   private renderer: THREE.WebGLRenderer;
   private scene = new THREE.Scene();
@@ -598,12 +601,12 @@ export class Station3D {
     this.vignette.setAttribute('aria-hidden', 'true');
     this.setVignette(false);
     this.container.appendChild(this.vignette);
-    const prompt = make('bg-glow px-3 py-1 text-sm text-void shadow-lg');
+    const prompt = make('bg-glow px-3 py-1 text-sm text-void shadow-lg compact:px-2 compact:py-0.5 compact:text-xs');
     prompt.style.display = 'none';
     // Task labels. When the task is off screen, they stick to the screen edge with an arrow pointing to it.
     // Drawn above the HUD layer (z-30), so a task arrow at the screen edge is never hidden behind a panel.
-    const objective = make('z-30 border-2 border-void bg-[#ffd23f] px-3 py-1 text-sm text-void shadow-lg');
-    const urgent = make('z-30 border-2 border-void bg-nola px-3 py-1 text-sm text-void shadow-lg');
+    const objective = make('z-30 border-2 border-void bg-[#ffd23f] px-3 py-1 text-sm text-void shadow-lg compact:px-2 compact:py-0.5 compact:text-[11px]');
+    const urgent = make('z-30 border-2 border-void bg-nola px-3 py-1 text-sm text-void shadow-lg compact:px-2 compact:py-0.5 compact:text-[11px]');
     objective.style.display = urgent.style.display = 'none';
     this.labels = { name, prompt, objective, urgent };
   }
@@ -958,7 +961,8 @@ export class Station3D {
       const wave = still ? 0 : Math.sin(this.time * 6);
       focus.scale.set(1 + wave * 0.06, 1, 1 + wave * 0.06);
       (focus.material as THREE.MeshBasicMaterial).opacity = 0.6 + wave * 0.2;
-      this.labels.prompt.textContent = `Press E: ${item.name}`;
+      // Touch screens have no E key: point to the round Use button instead.
+      this.labels.prompt.textContent = `${TOUCH ? 'Tap Use' : 'Press E'}: ${item.name}`;
       this.placeLabel(this.labels.prompt, item.x + 0.5, 0.35, item.y + 0.5);
     } else this.labels.prompt.style.display = 'none';
     this.placeLabel(this.labels.name, p.x, 1.35, p.z);

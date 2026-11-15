@@ -306,17 +306,20 @@ function StationGame({ mode }: { mode: ViewMode }) {
         <div className="flex flex-wrap items-start justify-between gap-2 xl:flex-nowrap">
           <div className="flex flex-col gap-2">
             {solSave && (
-              <section aria-label="Today's plan" className="pointer-events-auto w-60 max-w-[64vw] sm:w-64 rounded-2xl border-2 border-nola bg-hull/90 p-3 backdrop-blur">
+              <section aria-label="Today's plan" className="pointer-events-auto w-60 max-w-[64vw] sm:w-64 rounded-2xl border-2 border-nola bg-hull/90 p-3 backdrop-blur compact:w-52 compact:max-w-[58vw] compact:p-2">
                 <p className="flex justify-between gap-2 text-xs font-bold uppercase tracking-widest text-nola-soft">
                   <span>
                     Sol {solSave.state.sol} of {SOL_LENGTH}
                   </span>
                   {missionRecord.loaded && <span className="text-mist">{missionRecord.rank.title}</span>}
                 </p>
-                <p aria-live="polite" className="text-sm font-semibold">
+                <p aria-live="polite" className="text-sm font-semibold compact:text-xs">
                   {solHint(solSave)}
                 </p>
-                <BodyStatus body={solSave.state.body} />
+                {/* The crew's body bars take a lot of room on a phone; they are in the Command Console briefing too. */}
+                <div className="compact:hidden">
+                  <BodyStatus body={solSave.state.body} />
+                </div>
               </section>
             )}
             <EarthLinkPanel state={state} />
@@ -358,17 +361,17 @@ function StationGame({ mode }: { mode: ViewMode }) {
               onClick={() => update({ muted: !settings.muted })}
               aria-pressed={!settings.muted}
               aria-label={settings.muted ? 'Sound off. Turn sound on' : 'Sound on. Turn sound off'}
-              className="pointer-events-auto flex h-12 items-center justify-center gap-2 self-end rounded-full border-2 border-line bg-hull/90 px-3 font-bold"
+              className="pointer-events-auto flex h-12 items-center justify-center gap-2 self-end rounded-full border-2 border-line bg-hull/90 px-3 font-bold compact:h-10 compact:w-10 compact:px-0"
             >
               {settings.muted ? <VolumeX aria-hidden="true" size={20} /> : <Volume2 aria-hidden="true" size={20} />}
-              <span aria-hidden="true" className="max-sm:hidden">{settings.muted ? 'Sound off' : 'Sound on'}</span>
+              <span aria-hidden="true" className="compact:hidden">{settings.muted ? 'Sound off' : 'Sound on'}</span>
             </button>
-            <Link to={mode === '3d' ? '/mission2d' : '/mission'} onClick={sim.saveNow} className="pointer-events-auto flex h-12 items-center gap-2 rounded-full border-2 border-glow bg-hull/90 px-3 font-bold sm:px-4" aria-label={mode === '3d' ? '2D view' : '3D view'}>
+            <Link to={mode === '3d' ? '/mission2d' : '/mission'} onClick={sim.saveNow} className="pointer-events-auto flex h-12 items-center gap-2 rounded-full border-2 border-glow bg-hull/90 px-3 font-bold sm:px-4 compact:hidden" aria-label={mode === '3d' ? '2D view' : '3D view'}>
               <Box aria-hidden="true" size={20} /> {mode === '3d' ? '2D' : '3D'}
               <span aria-hidden="true" className="max-sm:hidden">view</span>
             </Link>
             {mode === '3d' && (
-              <div className="pointer-events-auto flex items-center gap-1 rounded-full border-2 border-line bg-hull/90 p-1 text-sm font-bold">
+              <div className="pointer-events-auto flex items-center gap-1 rounded-full border-2 border-line bg-hull/90 p-1 text-sm font-bold compact:hidden">
                 <span className="sr-only">Graphics quality</span>
                 {(['low', 'high'] as const).map((option) => (
                   <button key={option} type="button" aria-pressed={quality === option} onClick={() => changeQuality(option)} className={`min-h-9 rounded-full px-2.5 sm:px-3 ${quality === option ? 'bg-glow text-void' : 'text-mist'}`}>
@@ -390,7 +393,7 @@ function StationGame({ mode }: { mode: ViewMode }) {
           </p>
         )}
         <div className="flex flex-wrap items-end justify-between gap-2">
-          <p className="pointer-events-auto w-fit rounded-full bg-hull/90 px-3 py-1 text-sm font-bold" aria-live="polite">
+          <p className="pointer-events-auto w-fit rounded-full bg-hull/90 px-3 py-1 text-sm font-bold compact:hidden" aria-live="polite">
             {room ? findRoom(room).name : 'Station'}
             {nearbyName ? ` · Near: ${nearbyName}` : ''}
           </p>
@@ -403,21 +406,26 @@ function StationGame({ mode }: { mode: ViewMode }) {
           })()}
         </div>
         {/* Bottom of the screen, inset from phone notches and home bars. */}
-        <div className="pb-[env(safe-area-inset-bottom)]">
-          <Hotbar
-            state={state}
-            nearbyName={nearbyName}
-            onMap={() => setMapOpen(true)}
-            onMenu={() => setMenuOpen(true)}
-            onUse={() => nearby && setOpenEquipment(nearby)}
-            onTurn={mode === '3d' ? () => bridge.pendingTurns.push(1) : undefined}
-          />
-          <p className="mt-1 hidden text-center text-xs font-semibold text-mist [@media(pointer:fine)]:block">
-            Move: W A S D or arrow keys{mode === '3d' ? ' · Turn camera: Q / R' : ''}
-          </p>
-          {/* Touch screens: the joystick and the big Use button. */}
-          <div className="mt-2 flex items-end justify-between gap-2 [@media(pointer:fine)]:hidden">
+        {/* Touch screens get the joystick (left) and the big Use button (right). In portrait the hotbar sits on its
+            own row above them; in landscape it sits between them, so the middle of the screen stays clear. */}
+        <div className="flex flex-wrap items-end justify-between gap-2 pb-[env(safe-area-inset-bottom)]">
+          <div className="order-1 [@media(pointer:fine)]:hidden">
             <Joystick bridge={bridge} />
+          </div>
+          <div className="order-2 min-w-0 flex-1 [@media(pointer:coarse)_and_(orientation:portrait)]:order-first [@media(pointer:coarse)_and_(orientation:portrait)]:basis-full">
+            <Hotbar
+              state={state}
+              nearbyName={nearbyName}
+              onMap={() => setMapOpen(true)}
+              onMenu={() => setMenuOpen(true)}
+              onUse={() => nearby && setOpenEquipment(nearby)}
+              onTurn={mode === '3d' ? () => bridge.pendingTurns.push(1) : undefined}
+            />
+            <p className="mt-1 hidden text-center text-xs font-semibold text-mist [@media(pointer:fine)]:block">
+              Move: W A S D or arrow keys{mode === '3d' ? ' · Turn camera: Q / R' : ''}
+            </p>
+          </div>
+          <div className="order-3 [@media(pointer:fine)]:hidden">
             <InteractButton label={nearbyName} onPress={() => nearby && setOpenEquipment(nearby)} />
           </div>
         </div>
@@ -463,6 +471,18 @@ function StationGame({ mode }: { mode: ViewMode }) {
           <Link to={mode === '3d' ? '/mission2d' : '/mission'} className={buttonClasses('secondary')} onClick={sim.saveNow}>
             {mode === '3d' ? 'Switch to the 2D view' : 'Switch to the 3D view'}
           </Link>
+          {mode === '3d' && (
+            <div role="group" aria-label="Graphics quality" className="flex items-center justify-between gap-3 rounded-2xl border-2 border-line px-4 py-2">
+              <span className="font-semibold">Graphics</span>
+              <span className="flex gap-1 rounded-full bg-void p-1 text-sm font-bold">
+                {(['low', 'high'] as const).map((option) => (
+                  <button key={option} type="button" aria-pressed={quality === option} onClick={() => changeQuality(option)} className={`min-h-10 rounded-full px-4 ${quality === option ? 'bg-glow text-void' : 'text-mist'}`}>
+                    {option === 'low' ? 'Low (faster)' : 'High'}
+                  </button>
+                ))}
+              </span>
+            </div>
+          )}
           <Button
             variant="secondary"
             onClick={() => {

@@ -1,18 +1,19 @@
 import { Check, ChevronDown, ChevronUp, Hand, Lock } from 'lucide-react';
-import { useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react';
 import { Link } from 'react-router';
 import { NolaMascot } from '../../features/companion/NolaMascot';
 import { moduleForSystem } from '../../features/unlocks/unlockManager';
 import { currentMission, MISSIONS } from '../../simulation/missions';
 import type { LogTone, StationState } from '../../simulation/types';
 import type { GameBridge } from '../GameBridge';
+import { isCompactScreen, useCompact } from './useCompact';
 
 const panel = 'rounded-2xl border-2 border-line bg-hull/90 backdrop-blur';
 
 /** The current mission and its tasks: progress, the next task highlighted, and a tick that pops when a task is done. */
 export function MissionPanel({ state }: { state: StationState }) {
-  // Starts folded on small screens so it does not cover the station.
-  const [open, setOpen] = useState(() => window.innerWidth >= 640);
+  // Starts folded on phones so it does not cover the station.
+  const [open, setOpen] = useState(() => !isCompactScreen());
   const mission = currentMission(state);
   const nextLocked = MISSIONS.find((candidate) => !state.unlocked.includes(candidate.system));
   const nextModule = nextLocked ? moduleForSystem(nextLocked.system) : undefined;
@@ -22,13 +23,13 @@ export function MissionPanel({ state }: { state: StationState }) {
   const number = mission ? MISSIONS.indexOf(mission) + 1 : MISSIONS.length;
 
   return (
-    <section aria-label="Mission" className={`${panel} pointer-events-auto w-60 max-w-[64vw] overflow-hidden p-0 sm:w-72 sm:max-w-[78vw]`}>
-      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex w-full items-center justify-between gap-2 px-3 pb-2 pt-3 text-left">
+    <section aria-label="Mission" className={`${panel} pointer-events-auto w-60 max-w-[64vw] overflow-hidden p-0 sm:w-72 sm:max-w-[78vw] compact:w-52 compact:max-w-[58vw]`}>
+      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex w-full items-center justify-between gap-2 px-3 pb-2 pt-3 text-left compact:px-2.5 compact:pb-1.5 compact:pt-2">
         <span className="min-w-0">
-          <span className="block text-xs font-bold uppercase tracking-widest text-nola-soft">
+          <span className="block text-xs font-bold uppercase tracking-widest text-nola-soft compact:text-[10px]">
             {mission ? `Mission ${number} of ${MISSIONS.length}` : 'Missions'}
           </span>
-          <span className="block font-display text-lg font-semibold leading-tight">{mission ? mission.title : 'All clear'}</span>
+          <span className="block font-display text-lg font-semibold leading-tight compact:truncate compact:text-sm">{mission ? mission.title : 'All clear'}</span>
         </span>
         <span className="flex items-center gap-2">
           {mission && (
@@ -103,11 +104,19 @@ const TONE_WORD: Record<LogTone, string> = { info: '', good: '', warn: 'Warning:
 /** NOLA's latest message, shown as a caption so nothing depends on sound. */
 export function NolaCaption({ state }: { state: StationState }) {
   const entry = state.log.at(-1);
-  if (!entry) return null;
+  const compact = useCompact();
+  // On phones each message shows for a few seconds and then gets out of the way (warnings stay).
+  const [hiddenEntry, setHiddenEntry] = useState<unknown>(null);
+  useEffect(() => {
+    if (!compact || !entry || entry.tone === 'warn' || entry.tone === 'danger') return;
+    const timer = window.setTimeout(() => setHiddenEntry(entry), 6000);
+    return () => window.clearTimeout(timer);
+  }, [compact, entry]);
+  if (!entry || (compact && hiddenEntry === entry)) return null;
   return (
-    <div className={`pointer-events-auto flex w-fit max-w-xl items-center gap-2 rounded-2xl border-2 bg-star px-3 py-2 text-void shadow-xl ${TONE_STYLE[entry.tone]}`}>
-      <NolaMascot size={44} floating={false} mood={entry.tone === 'good' ? 'excited' : entry.tone === 'info' ? 'happy' : 'curious'} className="shrink-0" />
-      <p aria-live="polite" className="text-sm font-semibold sm:text-base">
+    <div className={`pointer-events-auto flex w-fit max-w-xl items-center gap-2 rounded-2xl border-2 bg-star px-3 py-2 text-void shadow-xl compact:max-w-[24rem] compact:gap-1.5 compact:px-2 compact:py-1 ${TONE_STYLE[entry.tone]}`}>
+      <NolaMascot size={44} floating={false} mood={entry.tone === 'good' ? 'excited' : entry.tone === 'info' ? 'happy' : 'curious'} className="shrink-0 compact:hidden" />
+      <p aria-live="polite" className="text-sm font-semibold sm:text-base compact:text-xs">
         <span className="sr-only">NOLA says: </span>
         <strong>{TONE_WORD[entry.tone]}</strong>
         {entry.text}
@@ -123,7 +132,7 @@ export function InteractButton({ label, onPress }: { label: string | null; onPre
       type="button"
       disabled={!label}
       onClick={onPress}
-      className="pointer-events-auto flex h-24 w-24 flex-col items-center justify-center rounded-full border-4 border-void bg-nola text-center font-display text-sm font-bold leading-tight text-void shadow-xl transition active:scale-95 disabled:bg-panel disabled:text-mist"
+      className="pointer-events-auto flex h-24 w-24 flex-col items-center justify-center rounded-full border-4 border-void bg-nola compact:h-20 compact:w-20 compact:text-xs text-center font-display text-sm font-bold leading-tight text-void shadow-xl transition active:scale-95 disabled:bg-panel disabled:text-mist"
     >
       <Hand aria-hidden="true" size={26} />
       {label ? 'Use' : 'Nothing nearby'}
@@ -135,7 +144,7 @@ export function InteractButton({ label, onPress }: { label: string | null; onPre
 /** A touch joystick. It writes the direction straight to the game bridge. */
 export function Joystick({ bridge }: { bridge: GameBridge }) {
   const base = useRef<HTMLDivElement>(null);
-  const [knob, setKnob] = useState({ x: 0, y: 0 });
+  const [knob, setKnob] = useState({ x: 0, y: 0, travel: 36 });
 
   function move(event: ReactPointerEvent) {
     const box = base.current?.getBoundingClientRect();
@@ -151,13 +160,14 @@ export function Joystick({ bridge }: { bridge: GameBridge }) {
     // The bridge is the game's input channel: writing to it is how the joystick talks to Phaser.
     // oxlint-disable-next-line react/immutability
     bridge.input = { x, y };
-    setKnob({ x, y });
+    // How far the knob may move follows the pad's size (it is smaller on phones).
+    setKnob({ x, y, travel: radius * 0.56 });
   }
 
   function release() {
     // oxlint-disable-next-line react/immutability
     bridge.input = { x: 0, y: 0 };
-    setKnob({ x: 0, y: 0 });
+    setKnob((old) => ({ ...old, x: 0, y: 0 }));
   }
 
   return (
@@ -171,9 +181,9 @@ export function Joystick({ bridge }: { bridge: GameBridge }) {
       onPointerMove={(event) => event.buttons > 0 && move(event)}
       onPointerUp={release}
       onPointerCancel={release}
-      className="pointer-events-auto relative h-32 w-32 touch-none rounded-full border-4 border-line bg-hull/70"
+      className="pointer-events-auto relative h-32 w-32 touch-none rounded-full border-4 border-line bg-hull/70 compact:h-24 compact:w-24"
     >
-      <div className="absolute left-1/2 top-1/2 h-14 w-14 rounded-full border-4 border-void bg-glow" style={{ transform: `translate(calc(-50% + ${knob.x * 36}px), calc(-50% + ${knob.y * 36}px))` }} />
+      <div className="absolute left-1/2 top-1/2 h-14 w-14 rounded-full border-4 border-void bg-glow compact:h-10 compact:w-10" style={{ transform: `translate(calc(-50% + ${knob.x * knob.travel}px), calc(-50% + ${knob.y * knob.travel}px))` }} />
     </div>
   );
 }

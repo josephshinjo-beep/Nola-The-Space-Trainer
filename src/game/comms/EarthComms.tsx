@@ -180,7 +180,7 @@ export function EarthLinkPanel({ state }: { state: StationState }) {
   if (state.earthCalls.length === 0 || !state.site) return null;
   const link = siteLink(state.site);
   return (
-    <section aria-label="Message to Earth" className="pointer-events-auto w-64 max-w-[70vw] space-y-2 rounded-2xl border-2 border-glow bg-hull/90 p-3 backdrop-blur">
+    <section aria-label="Message to Earth" className="pointer-events-auto w-64 max-w-[70vw] space-y-2 rounded-2xl border-2 border-glow bg-hull/90 p-3 backdrop-blur compact:w-52 compact:space-y-1 compact:p-2 compact:text-xs">
       <p className="flex items-center gap-1 text-xs font-bold uppercase tracking-widest text-glow">
         <Radio aria-hidden="true" size={14} /> Message to Earth · {link.name}
       </p>
