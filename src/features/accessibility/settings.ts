@@ -15,6 +15,8 @@ export interface AccessibilitySettings {
   colorSafe: boolean;
   /** Show "Listen" buttons that read NOLA's words aloud. */
   readAloud: boolean;
+  /** Read NOLA's words aloud by themselves as they appear (needs readAloud; paused while muted). */
+  autoRead: boolean;
   speechRate: SpeechRate;
   /** Voice volume from 0 (silent) to 1 (full). */
   voiceVolume: number;
@@ -22,7 +24,7 @@ export interface AccessibilitySettings {
   musicVolume: number;
   /** Sound effects (footsteps) volume, 0 (off) to 1. */
   sfxVolume: number;
-  /** Turns every sound off at once. */
+  /** Turns every sound off at once: music, sound effects and automatic reading. */
   muted: boolean;
 }
 
@@ -33,6 +35,7 @@ export const DEFAULT_SETTINGS: AccessibilitySettings = {
   reduceMotion: false,
   colorSafe: false,
   readAloud: true,
+  autoRead: true,
   speechRate: 'normal',
   voiceVolume: 1,
   musicVolume: 0.45,
@@ -59,6 +62,7 @@ export function sanitizeSettings(raw: unknown): AccessibilitySettings {
     reduceMotion: bool(data.reduceMotion, d.reduceMotion),
     colorSafe: bool(data.colorSafe, d.colorSafe),
     readAloud: bool(data.readAloud, d.readAloud),
+    autoRead: bool(data.autoRead, d.autoRead),
     speechRate: SPEECH_RATES.includes(data.speechRate as SpeechRate) ? (data.speechRate as SpeechRate) : d.speechRate,
     voiceVolume: Math.min(1, Math.max(0, volume)),
     musicVolume: unit(data.musicVolume, d.musicVolume),

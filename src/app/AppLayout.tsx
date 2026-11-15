@@ -7,6 +7,7 @@ import { useAuth } from '../features/auth/AuthContext';
 import { GuestModal } from '../features/auth/GuestMode';
 import { AstronautAvatar } from '../features/profile/AstronautAvatar';
 import { ImmersiveContext } from './immersive';
+import { MuteButton } from '../features/audio/MuteButton';
 import { NAV_ITEMS } from './navigation';
 
 /**
@@ -72,6 +73,7 @@ export function AppLayout() {
             </ul>
           </nav>
 
+          <MuteButton variant="rail" className={`${RAIL_ITEM} h-12 w-full text-sm font-semibold text-mist hover:bg-panel hover:text-star aria-pressed:text-alert`} labelClassName={RAIL_LABEL} />
           <Link to="/data-sources" title="Data sources" className={`${RAIL_ITEM} h-12 text-sm font-semibold text-mist hover:bg-panel hover:text-star`}>
             <Database aria-hidden="true" size={22} className="shrink-0" />
             <span className={RAIL_LABEL}>Data sources</span>
@@ -108,6 +110,7 @@ export function AppLayout() {
               <FlaskConical aria-hidden="true" size={18} /> Guest
             </button>
           )}
+          <MuteButton className={isGuest ? 'mr-2' : 'ml-auto mr-2'} />
           <button
             type="button"
             onClick={signOut}

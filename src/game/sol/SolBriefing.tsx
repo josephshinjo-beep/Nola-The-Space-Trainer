@@ -245,7 +245,7 @@ export function SolBriefing({ save, unlocked, onPlan, onSkip, onFinish, onClose,
           </span>
         </p>
         <div className="w-fit rounded-full bg-star">
-          <ReadAloudButton text={`Why this is real: ${chosen.whyReal}`} />
+          <ReadAloudButton text={`Why this is real: ${chosen.whyReal}`} auto={false} />
         </div>
         <p className="rounded-2xl bg-panel p-4 text-lg">
           <strong className="font-display text-nola-soft">Your urgent job: </strong>

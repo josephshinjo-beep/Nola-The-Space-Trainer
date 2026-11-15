@@ -21,6 +21,11 @@ export function SoundDirector() {
     audio.setVolumes(settings.musicVolume, settings.sfxVolume, settings.muted);
   }, [settings.musicVolume, settings.sfxVolume, settings.muted]);
 
+  // Muting also stops NOLA mid-sentence.
+  useEffect(() => {
+    if (settings.muted && typeof window !== 'undefined' && 'speechSynthesis' in window) window.speechSynthesis.cancel();
+  }, [settings.muted]);
+
   useEffect(() => {
     // Autoplay attempt as soon as the app opens.
     audio.unlock();

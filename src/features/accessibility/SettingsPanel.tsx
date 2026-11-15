@@ -103,11 +103,19 @@ export function SettingsPanel() {
           checked={settings.readAloud}
           onChange={(readAloud) => update({ readAloud })}
         />
+        {settings.readAloud && (
+          <Toggle
+            label="Read NOLA's words automatically"
+            hint="NOLA reads her messages aloud as they appear, without pressing Listen. Paused while sound is muted."
+            checked={settings.autoRead}
+            onChange={(autoRead) => update({ autoRead })}
+          />
+        )}
       </div>
 
       <fieldset className="space-y-5 rounded-2xl border-2 border-line bg-void/40 p-4">
         <legend className="px-1 font-display text-lg font-medium">Music and sound</legend>
-        <Toggle label="Mute all sound" hint="Turns off the music and footsteps. NOLA's read-aloud voice has its own setting." checked={settings.muted} onChange={(muted) => update({ muted })} />
+        <Toggle label="Mute all sound" hint="Turns off the music, sound effects and automatic reading. You can still press Listen to hear NOLA." checked={settings.muted} onChange={(muted) => update({ muted })} />
         {(
           [
             ['musicVolume', 'Music volume', musicId],
@@ -131,7 +139,7 @@ export function SettingsPanel() {
             />
           </div>
         ))}
-        <p className="text-sm text-mist">Music starts after your first click, tap or key press. It is never needed to play: everything is also shown as text.</p>
+        <p className="text-sm text-mist">Sound is on by default and starts by itself; if your browser blocks that, it starts on your first click, tap or key press. It is never needed to play: everything is also shown as text.</p>
       </fieldset>
 
       {settings.readAloud && (
@@ -158,7 +166,7 @@ export function SettingsPanel() {
             />
           </div>
           <div className="rounded-2xl bg-star p-3">
-            <ReadAloudButton text="Hello! I'm NOLA. This is how my voice sounds." />
+            <ReadAloudButton text="Hello! I'm NOLA. This is how my voice sounds." auto={false} />
             <span className="ml-3 font-semibold text-void">Test the voice</span>
           </div>
         </div>

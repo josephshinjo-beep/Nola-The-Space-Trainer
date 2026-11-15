@@ -2,6 +2,7 @@ import { Accessibility, Database } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { Logo } from '../../components/Logo';
+import { MuteButton } from '../audio/MuteButton';
 import { NolaMascot, type NolaMood } from '../companion/NolaMascot';
 import { SpeechBubble } from '../companion/SpeechBubble';
 
@@ -26,6 +27,7 @@ export function AuthShell({ title, nolaMessage, mood = 'happy', children }: Auth
           <Accessibility aria-hidden="true" size={20} />
           Accessibility
         </Link>
+        <MuteButton />
         <Link to="/data-sources" className="inline-flex min-h-11 items-center gap-2 rounded-full border-2 border-line px-4 font-semibold text-mist transition hover:border-glow hover:text-star">
           <Database aria-hidden="true" size={20} />
           Data sources
