@@ -10,6 +10,7 @@ import { CURRICULUM, LESSON_STAGES, type AcademyModule } from '../curriculum';
 import type { FactKind, Lesson } from '../lessonTypes';
 import { EMPTY_PROGRESS, isQuizPass } from '../progress';
 import { ExploreStage } from './ExploreStage';
+import { LaunchCinematic } from './LaunchCinematic';
 import { ChallengeStage, QuizStage } from './QuizStage';
 
 const FACT_LABEL: Record<FactKind, string> = {
@@ -136,6 +137,11 @@ interface LessonPlayerProps {
  * Runs one lesson through its six stages and saves progress as it goes,
  * so a student who leaves can pick up where they stopped.
  */
+/** True when the student or their device has asked for less motion (the launch animation is then skipped). */
+function wantsStillness(): boolean {
+  return document.documentElement.dataset.motion === 'reduced' || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+}
+
 export function LessonPlayer({ module, lesson }: LessonPlayerProps) {
   const { progress, save } = useAcademyProgress();
   const saved = progress[module.id] ?? EMPTY_PROGRESS;
@@ -143,6 +149,7 @@ export function LessonPlayer({ module, lesson }: LessonPlayerProps) {
 
   // Resume at the saved stage; a completed lesson reopens at the start for review.
   const [stage, setStage] = useState(() => (saved.completed ? STAGE.intro : Math.min(saved.stage, STAGE.challenge)));
+  const [launching, setLaunching] = useState(false);
   const [exploreSolved, setExploreSolved] = useState(saved.stage > STAGE.explore || saved.completed);
   const [challengeSolved, setChallengeSolved] = useState(saved.challengeDone);
   const [saveError, setSaveError] = useState(false);
@@ -248,7 +255,7 @@ export function LessonPlayer({ module, lesson }: LessonPlayerProps) {
             <div className="space-y-6">
               <ChallengeStage challenge={lesson.challenge} onSolved={handleChallengeSolved} />
               {(challengeSolved || reviewing) && (
-                <Button onClick={() => setStage(STAGE.unlock)}>
+                <Button onClick={() => (wantsStillness() ? setStage(STAGE.unlock) : setLaunching(true))}>
                   See what you unlocked <ArrowRight aria-hidden="true" size={20} />
                 </Button>
               )}
@@ -259,6 +266,14 @@ export function LessonPlayer({ module, lesson }: LessonPlayerProps) {
               <Button onClick={() => setStage(STAGE.quiz)}>Go to the knowledge check</Button>
             </div>
           ))}
+        {launching && (
+          <LaunchCinematic
+            onDone={() => {
+              setLaunching(false);
+              setStage(STAGE.unlock);
+            }}
+          />
+        )}
         {stage === STAGE.unlock &&
           (saved.completed ? (
             <UnlockStage module={module} />

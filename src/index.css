@@ -261,3 +261,7 @@ html[data-motion="reduced"] *::after {
   transition: none !important;
   scroll-behavior: auto !important;
 }
+
+/* The launch animation after a mission challenge fades in over the page. */
+.launch-cinematic { animation: launch-in 0.35s ease-out both; }
+@keyframes launch-in { from { opacity: 0; } to { opacity: 1; } }
