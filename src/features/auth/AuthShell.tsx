@@ -2,7 +2,6 @@ import { Accessibility, Database } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 import { Logo } from '../../components/Logo';
-import { VideoBackdrop } from '../../components/VideoBackdrop';
 import { NolaMascot, type NolaMood } from '../companion/NolaMascot';
 import { SpeechBubble } from '../companion/SpeechBubble';
 
@@ -18,7 +17,6 @@ interface AuthShellProps {
 export function AuthShell({ title, nolaMessage, mood = 'happy', children }: AuthShellProps) {
   return (
     <div className="mx-auto flex min-h-dvh max-w-6xl flex-col px-5 py-6 lg:px-10">
-      <VideoBackdrop />
       <header className="flex items-center justify-between gap-4">
         <Logo />
         <Link

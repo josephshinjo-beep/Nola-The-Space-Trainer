@@ -5,8 +5,9 @@ import { audio, musicForPath } from './audioEngine';
 
 /**
  * Picks the music for the page being shown and keeps the volumes in step
- * with the settings. Sound starts on the first click, tap or key press,
- * because browsers do not allow it before that.
+ * with the settings. Music is on by default and tries to start straight
+ * away; if the browser blocks autoplay, it starts on the first click, tap or
+ * key press instead.
  */
 export function SoundDirector() {
   const { pathname } = useLocation();
@@ -21,17 +22,21 @@ export function SoundDirector() {
   }, [settings.musicVolume, settings.sfxVolume, settings.muted]);
 
   useEffect(() => {
-    if (audio.unlocked) return;
-    const unlock = () => {
+    // Autoplay attempt as soon as the app opens.
+    audio.unlock();
+    const events = ['pointerdown', 'keydown', 'touchend'] as const;
+    let timer = 0;
+    const remove = () => events.forEach((name) => window.removeEventListener(name, unlock));
+    function unlock() {
       audio.unlock();
-      window.removeEventListener('pointerdown', unlock);
-      window.removeEventListener('keydown', unlock);
-    };
-    window.addEventListener('pointerdown', unlock);
-    window.addEventListener('keydown', unlock);
+      // Starting is asynchronous; stop listening only once sound is really playing.
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => audio.unlocked && remove(), 300);
+    }
+    events.forEach((name) => window.addEventListener(name, unlock));
     return () => {
-      window.removeEventListener('pointerdown', unlock);
-      window.removeEventListener('keydown', unlock);
+      window.clearTimeout(timer);
+      remove();
     };
   }, []);
 

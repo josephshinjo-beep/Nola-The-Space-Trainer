@@ -16,8 +16,8 @@ let instance: SpaceBackground | null = null;
 let coverCount = 0;
 
 /**
- * Call when something opaque covers the whole screen (the lobby video,
- * the station game), so the background stops drawing frames nobody can
+ * Call when something opaque covers the whole screen (the station game),
+ * so the background stops drawing frames nobody can
  * see. Returns a function that undoes it.
  */
 export function pauseSpaceBackdrop(): () => void {

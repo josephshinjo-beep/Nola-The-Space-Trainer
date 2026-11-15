@@ -60,14 +60,24 @@ class AudioEngine {
   private walking = false;
   private volumes = { music: 0.45, sfx: 0.7, muted: false };
 
-  /** True once the browser has allowed sound (after the first interaction). */
+  /** True once the browser is actually letting sound play. */
   get unlocked(): boolean {
-    return this.context !== null;
+    return this.context?.state === 'running' && (!this.playing || !this.playing.element.paused);
   }
 
-  /** Call from a user gesture. Creates the audio graph and starts the music that is wanted. */
+  /**
+   * Starts sound. Called once as soon as the app loads (autoplay: many
+   * browsers allow it on sites the player uses often), and again on the first
+   * click, tap or key press, which every browser accepts.
+   */
   unlock(): void {
-    if (this.context || typeof window === 'undefined') return;
+    if (this.context) {
+      void this.context.resume();
+      if (this.playing?.element.paused) void this.playing.element.play().catch(() => {});
+      else if (!this.playing && this.wanted && this.musicAudible()) this.startMusic(this.wanted, 0);
+      return;
+    }
+    if (typeof window === 'undefined') return;
     const Context = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
     if (!Context) return;
     const context = new Context();

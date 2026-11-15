@@ -1,8 +1,7 @@
 import { Database, FlaskConical, LogOut } from 'lucide-react';
 import { useState } from 'react';
-import { Link, NavLink, Outlet, useLocation } from 'react-router';
+import { Link, NavLink, Outlet } from 'react-router';
 import { Logo } from '../components/Logo';
-import { VideoBackdrop } from '../components/VideoBackdrop';
 import { AcademyProgressProvider } from '../features/academy/AcademyProgressContext';
 import { useAuth } from '../features/auth/AuthContext';
 import { GuestModal } from '../features/auth/GuestMode';
@@ -26,7 +25,6 @@ export function AppLayout() {
   const [guestOpen, setGuestOpen] = useState(false);
   // A guest cannot log back in to a temporary account, so "log out" opens the guest options instead.
   const signOut = () => (isGuest ? setGuestOpen(true) : void logout());
-  const { pathname } = useLocation();
   // While the station game runs it fills the whole screen with no side panel or tab bars;
   // every other page (the locked mission screen too) sits in a centred column.
   const [fullScreen, setFullScreen] = useState(false);
@@ -36,7 +34,6 @@ export function AppLayout() {
     <ImmersiveContext value={setFullScreen}>
     <div className="lg:flex">
       {/* The moving galaxy sits behind Mission Control, the app's lobby. */}
-      {pathname === '/' && <VideoBackdrop />}
       <a
         href="#main"
         className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-full focus:bg-star focus:px-5 focus:py-3 focus:font-semibold focus:text-void"
