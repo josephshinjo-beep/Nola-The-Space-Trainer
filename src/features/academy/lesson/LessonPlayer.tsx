@@ -10,7 +10,8 @@ import { CURRICULUM, LESSON_STAGES, type AcademyModule } from '../curriculum';
 import type { FactKind, Lesson } from '../lessonTypes';
 import { EMPTY_PROGRESS, isQuizPass } from '../progress';
 import { ExploreStage } from './ExploreStage';
-import { LaunchCinematic } from './LaunchCinematic';
+import { LaunchCinematic, wantsStillness } from '../../../components/LaunchCinematic';
+import { StationLink } from '../../../components/StationLink';
 import { ChallengeStage, QuizStage } from './QuizStage';
 
 const FACT_LABEL: Record<FactKind, string> = {
@@ -111,9 +112,7 @@ function UnlockStage({ module }: { module: AcademyModule }) {
         <ReadAloudButton text={message} />
       </div>
       <div className="flex flex-wrap justify-center gap-3">
-        <Link to="/mission" className={buttonClasses('primary')}>
-          Go to your station
-        </Link>
+        <StationLink className={buttonClasses('primary')}>Go to your station</StationLink>
         {next ? (
           <Link to={`/academy/${next.id}`} className={buttonClasses('secondary')}>
             Next module: {next.title}
@@ -137,11 +136,6 @@ interface LessonPlayerProps {
  * Runs one lesson through its six stages and saves progress as it goes,
  * so a student who leaves can pick up where they stopped.
  */
-/** True when the student or their device has asked for less motion (the launch animation is then skipped). */
-function wantsStillness(): boolean {
-  return document.documentElement.dataset.motion === 'reduced' || window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-}
-
 export function LessonPlayer({ module, lesson }: LessonPlayerProps) {
   const { progress, save } = useAcademyProgress();
   const saved = progress[module.id] ?? EMPTY_PROGRESS;

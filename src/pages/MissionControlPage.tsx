@@ -1,3 +1,4 @@
+import { StationLink } from '../components/StationLink';
 import { ArrowRight, Check, Lock, Palette, Rocket } from 'lucide-react';
 import { Link } from 'react-router';
 import { buttonClasses } from '../components/Button';
@@ -107,9 +108,9 @@ export function MissionControlPage() {
               </Link>
             )}
             {completed > 0 && (
-              <Link to="/mission" className={buttonClasses('secondary')}>
+              <StationLink className={buttonClasses('secondary')}>
                 <Rocket aria-hidden="true" size={20} /> Go to your station
-              </Link>
+              </StationLink>
             )}
           </div>
         </section>
