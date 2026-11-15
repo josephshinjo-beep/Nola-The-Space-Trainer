@@ -136,6 +136,8 @@ export interface SpaceBackground {
   setSpeed(multiplier: number): void;
   /** true = draw one still frame and do not animate (for reduced motion). */
   setStatic(isStatic: boolean): void;
+  /** Where the mouse is, from -1 to 1 on each axis. The stars lean very slightly away from it (parallax). */
+  setPointer(x: number, y: number): void;
   /** Average time spent drawing one frame, in milliseconds. */
   getAverageFrameMs(): number;
 }
@@ -170,6 +172,9 @@ function makeCanvas(width: number, height: number): HTMLCanvasElement {
 }
 
 /** Returns null if the browser cannot draw on a canvas; the page background colour shows instead. */
+/** How far each star layer (far, mid, near) shifts with the mouse at most, in CSS pixels. Small on purpose. */
+const PARALLAX_PX = [3, 7, 12];
+
 export function createSpaceBackground(canvas: HTMLCanvasElement, overrides: Partial<SpaceBackgroundConfig> = {}): SpaceBackground | null {
   const config: SpaceBackgroundConfig = { ...SPACE_CONFIG, ...overrides };
   const maybeContext = canvas.getContext('2d', { alpha: config.transparent });
@@ -191,6 +196,8 @@ export function createSpaceBackground(canvas: HTMLCanvasElement, overrides: Part
 
   let backdrop: HTMLCanvasElement | null = null;
   let galaxySprite: HTMLCanvasElement | null = null;
+  const pointerTarget = { x: 0, y: 0 };
+  const pointerAt = { x: 0, y: 0 };
   const glowSprites: HTMLCanvasElement[] = [];
   let layers: StarLayer[] = [];
 
@@ -336,6 +343,10 @@ export function createSpaceBackground(canvas: HTMLCanvasElement, overrides: Part
 
   function update(dt: number): void {
     clock += dt;
+    // Ease the parallax towards the mouse slowly, so it reads as a gentle drift, not a jump.
+    const follow = 1 - Math.exp(-1.5 * dt);
+    pointerAt.x += (pointerTarget.x - pointerAt.x) * follow;
+    pointerAt.y += (pointerTarget.y - pointerAt.y) * follow;
     // Everything drifts the same general way, and that way turns slowly.
     const heading = 2.6 + Math.sin(clock * 0.02) * 0.5;
     const dirX = Math.cos(heading);
@@ -415,10 +426,12 @@ export function createSpaceBackground(canvas: HTMLCanvasElement, overrides: Part
       ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
     }
 
-    // 3. Stars.
+    // 3. Stars. Nearer layers shift a few pixels more with the mouse, for a light sense of depth.
     const colors = config.starColors;
     for (let l = 0; l < layers.length; l++) {
       const layer = layers[l]!;
+      const shift = PARALLAX_PX[Math.min(l, PARALLAX_PX.length - 1)]!;
+      ctx.setTransform(pixelRatio, 0, 0, pixelRatio, -pointerAt.x * shift * pixelRatio, -pointerAt.y * shift * pixelRatio);
       const { x, y, size, alpha, phase, twinkle, colorEnd } = layer;
       const depth = layer.config.twinkleDepth;
       let i = 0;
@@ -436,6 +449,8 @@ export function createSpaceBackground(canvas: HTMLCanvasElement, overrides: Part
         }
       }
     }
+
+    ctx.setTransform(pixelRatio, 0, 0, pixelRatio, 0, 0);
 
     // 4. Shooting star: a short line that fades towards its tail and over its life.
     if (shot.active) {
@@ -554,6 +569,10 @@ export function createSpaceBackground(canvas: HTMLCanvasElement, overrides: Part
     },
     setSpeed(multiplier: number) {
       speed = Math.max(0, multiplier);
+    },
+    setPointer(x: number, y: number) {
+      pointerTarget.x = Math.max(-1, Math.min(1, x));
+      pointerTarget.y = Math.max(-1, Math.min(1, y));
     },
     setStatic(value: boolean) {
       if (value === isStatic) return;

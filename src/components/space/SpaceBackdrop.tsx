@@ -1,5 +1,4 @@
 import { useEffect, useRef } from 'react';
-import { startCursorGlow } from './cursorGlow';
 import { createSpaceBackground, SPACE_CONFIG, type SpaceBackground } from './SpaceBackground';
 
 /**
@@ -10,8 +9,8 @@ import { createSpaceBackground, SPACE_CONFIG, type SpaceBackground } from './Spa
  * mouse and touch, so they can never get in the way of the interface:
  *   1. A photo of the Milky Way taken by the Artemis II crew (credit: NASA),
  *      drifting very slowly (CSS, see .space-photo in index.css).
- *   2. A coloured glow that follows the mouse (cursorGlow.ts).
- *   3. A see-through canvas with twinkling stars and shooting stars.
+ *   2. A see-through canvas with twinkling stars and shooting stars, which
+ *      lean a few pixels with the mouse for a light sense of depth.
  */
 
 let instance: SpaceBackground | null = null;
@@ -51,9 +50,6 @@ function wantsStillness(): boolean {
 
 export function SpaceBackdrop() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
-  const glowRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => (glowRef.current ? startCursorGlow(glowRef.current) : undefined), []);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -71,6 +67,13 @@ export function SpaceBackdrop() {
     applyMotion();
     if (coverCount === 0) background.start();
 
+    // Mouse parallax (a mouse or pen only; touch screens keep a still sky).
+    const onPointer = (event: PointerEvent) => {
+      if (event.pointerType === 'touch') return;
+      background.setPointer((event.clientX / window.innerWidth) * 2 - 1, (event.clientY / window.innerHeight) * 2 - 1);
+    };
+    window.addEventListener('pointermove', onPointer, { passive: true });
+
     // The accessibility settings write data-motion on <html>; follow changes live.
     const observer = new MutationObserver(applyMotion);
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['data-motion'] });
@@ -78,6 +81,7 @@ export function SpaceBackdrop() {
     query.addEventListener('change', applyMotion);
 
     return () => {
+      window.removeEventListener('pointermove', onPointer);
       observer.disconnect();
       query.removeEventListener('change', applyMotion);
       background.destroy();
@@ -88,18 +92,6 @@ export function SpaceBackdrop() {
   return (
     <>
       <div aria-hidden="true" className="space-photo" />
-      <div ref={glowRef} aria-hidden="true" className="cursor-glow">
-        <div className="cursor-glow__halo">
-          <i />
-          <i />
-          <i />
-        </div>
-        <div className="cursor-glow__core">
-          <i />
-          <i />
-          <i />
-        </div>
-      </div>
       <canvas ref={canvasRef} aria-hidden="true" className="space-backdrop" />
     </>
   );

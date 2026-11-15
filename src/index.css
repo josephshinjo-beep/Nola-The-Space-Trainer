@@ -138,55 +138,6 @@ html[data-motion="reduced"] .space-photo { animation: none; }
   .space-photo { animation: none; }
 }
 
-/*
- * Mouse glow over the background (cursorGlow.ts moves it). Three colour
- * layers take turns, so the light slowly shifts cyan → violet → orange.
- * "screen" blending only ever brightens the photo, like light would.
- */
-.cursor-glow {
-  position: fixed;
-  inset: 0;
-  z-index: -1;
-  overflow: hidden;
-  pointer-events: none;
-  mix-blend-mode: screen;
-  opacity: 0;
-  transition: opacity 0.8s ease;
-}
-.cursor-glow[data-on] { opacity: 1; }
-.cursor-glow__halo,
-.cursor-glow__core {
-  position: absolute;
-  left: 0;
-  top: 0;
-  will-change: transform;
-}
-.cursor-glow__halo { width: 900px; height: 900px; }
-.cursor-glow__core { width: 260px; height: 260px; }
-.cursor-glow i {
-  position: absolute;
-  inset: 0;
-  border-radius: 50%;
-  animation: glow-cycle 18s ease-in-out infinite;
-}
-.cursor-glow__halo i:nth-child(1) { background: radial-gradient(closest-side, rgb(61 224 245 / 0.3), rgb(61 224 245 / 0.09) 55%, transparent); }
-.cursor-glow__halo i:nth-child(2) { background: radial-gradient(closest-side, rgb(139 92 246 / 0.34), rgb(139 92 246 / 0.1) 55%, transparent); animation-delay: -6s; }
-.cursor-glow__halo i:nth-child(3) { background: radial-gradient(closest-side, rgb(255 122 26 / 0.26), rgb(255 122 26 / 0.08) 55%, transparent); animation-delay: -12s; }
-.cursor-glow__core i:nth-child(1) { background: radial-gradient(closest-side, rgb(160 240 255 / 0.4), transparent); }
-.cursor-glow__core i:nth-child(2) { background: radial-gradient(closest-side, rgb(196 170 255 / 0.42), transparent); animation-delay: -6s; }
-.cursor-glow__core i:nth-child(3) { background: radial-gradient(closest-side, rgb(255 196 140 / 0.38), transparent); animation-delay: -12s; }
-@keyframes glow-cycle {
-  0%, 100% { opacity: 1; }
-  33% { opacity: 0; }
-  66% { opacity: 0; }
-}
-html[data-contrast="high"] .cursor-glow,
-html[data-backdrop="covered"] .cursor-glow,
-html[data-motion="reduced"] .cursor-glow { display: none; }
-@media (prefers-reduced-motion: reduce), (pointer: coarse) {
-  .cursor-glow { display: none; }
-}
-
 .space-backdrop {
   position: fixed;
   inset: 0;
