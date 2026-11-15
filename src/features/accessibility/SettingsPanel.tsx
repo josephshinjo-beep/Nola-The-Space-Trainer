@@ -65,6 +65,8 @@ function Toggle({ label, hint, checked, onChange }: ToggleProps) {
 export function SettingsPanel() {
   const { settings, update } = useSettings();
   const volumeId = useId();
+  const musicId = useId();
+  const sfxId = useId();
 
   return (
     <div className="space-y-6">
@@ -102,6 +104,35 @@ export function SettingsPanel() {
           onChange={(readAloud) => update({ readAloud })}
         />
       </div>
+
+      <fieldset className="space-y-5 rounded-2xl border-2 border-line bg-void/40 p-4">
+        <legend className="px-1 font-display text-lg font-medium">Music and sound</legend>
+        <Toggle label="Mute all sound" hint="Turns off the music and footsteps. NOLA's read-aloud voice has its own setting." checked={settings.muted} onChange={(muted) => update({ muted })} />
+        {(
+          [
+            ['musicVolume', 'Music volume', musicId],
+            ['sfxVolume', 'Sound effects volume (footsteps)', sfxId],
+          ] as const
+        ).map(([key, label, id]) => (
+          <div key={key}>
+            <label htmlFor={id} className="mb-2 block font-display text-lg font-medium">
+              {label}: {settings[key] === 0 ? 'off' : `${Math.round(settings[key] * 100)}%`}
+            </label>
+            <input
+              id={id}
+              type="range"
+              min={0}
+              max={100}
+              step={5}
+              value={Math.round(settings[key] * 100)}
+              disabled={settings.muted}
+              onChange={(event) => update({ [key]: Number(event.target.value) / 100 })}
+              className="h-10 w-full max-w-md accent-nola disabled:opacity-50"
+            />
+          </div>
+        ))}
+        <p className="text-sm text-mist">Music starts after your first click, tap or key press. It is never needed to play: everything is also shown as text.</p>
+      </fieldset>
 
       {settings.readAloud && (
         <div className="space-y-5 rounded-2xl border-2 border-line bg-void/40 p-4">

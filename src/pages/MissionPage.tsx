@@ -1,4 +1,4 @@
-import { Box } from 'lucide-react';
+import { Box, Volume2, VolumeX } from 'lucide-react';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
 import { Button, buttonClasses } from '../components/Button';
@@ -38,6 +38,7 @@ import { SOL_CONFIG } from '../sol/config';
 import { currentMission } from '../simulation/missions';
 import type { RoomId, StationState } from '../simulation/types';
 import type { Quality } from '../game3d/Station3D';
+import { audio } from '../features/audio/audioEngine';
 
 const SOL_LENGTH = SOL_CONFIG.time.missionLengthSols.value;
 const STORM = SOL_CONFIG.storm;
@@ -100,7 +101,7 @@ function buildView(state: StationState, avatar: GameView['avatar'], reducedMotio
 function StationGame({ mode }: { mode: ViewMode }) {
   const { user, profile } = useAuth();
   const { unlockedSystems, completedModuleIds } = useAcademyProgress();
-  const { settings } = useSettings();
+  const { settings, update } = useSettings();
   const weather = useSpaceWeather();
   const bridge = useMemo(() => new GameBridge(), []);
 
@@ -161,6 +162,37 @@ function StationGame({ mode }: { mode: ViewMode }) {
     bridge.paused = paused;
     setPaused(paused);
   }, [bridge, paused, setPaused]);
+
+  // Footsteps. The 3D view says when the astronaut walks; for the 2D view the
+  // page watches the movement keys and the joystick (the Phaser game is unchanged).
+  useEffect(() => {
+    if (mode === '3d') {
+      const stop = bridge.on('walking', (walking) => audio.setWalking(walking));
+      return () => {
+        stop();
+        audio.setWalking(false);
+      };
+    }
+    const held = new Set<string>();
+    const MOVE = ['w', 'a', 's', 'd', 'arrowup', 'arrowdown', 'arrowleft', 'arrowright'];
+    const down = (event: KeyboardEvent) => MOVE.includes(event.key.toLowerCase()) && held.add(event.key.toLowerCase());
+    const up = (event: KeyboardEvent) => held.delete(event.key.toLowerCase());
+    const clear = () => held.clear();
+    window.addEventListener('keydown', down);
+    window.addEventListener('keyup', up);
+    window.addEventListener('blur', clear);
+    const timer = window.setInterval(() => {
+      const stick = Math.hypot(bridge.input.x, bridge.input.y) > 0.2;
+      audio.setWalking(!bridge.paused && (held.size > 0 || stick));
+    }, 120);
+    return () => {
+      window.removeEventListener('keydown', down);
+      window.removeEventListener('keyup', up);
+      window.removeEventListener('blur', clear);
+      window.clearInterval(timer);
+      audio.setWalking(false);
+    };
+  }, [mode, bridge]);
 
   // Keyboard shortcuts shown on the hotbar: M opens the map, Esc opens the menu.
   useEffect(() => {
@@ -319,6 +351,16 @@ function StationGame({ mode }: { mode: ViewMode }) {
             )}
           </div>
           <div className="flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={() => update({ muted: !settings.muted })}
+              aria-pressed={!settings.muted}
+              aria-label={settings.muted ? 'Sound off. Turn sound on' : 'Sound on. Turn sound off'}
+              className="pointer-events-auto flex h-12 items-center justify-center gap-2 self-end rounded-full border-2 border-line bg-hull/90 px-3 font-bold"
+            >
+              {settings.muted ? <VolumeX aria-hidden="true" size={20} /> : <Volume2 aria-hidden="true" size={20} />}
+              <span aria-hidden="true" className="max-sm:hidden">{settings.muted ? 'Sound off' : 'Sound on'}</span>
+            </button>
             <Link to={mode === '3d' ? '/mission' : '/mission3d'} onClick={sim.saveNow} className="pointer-events-auto flex h-12 items-center gap-2 rounded-full border-2 border-glow bg-hull/90 px-3 font-bold sm:px-4" aria-label={mode === '3d' ? '2D view' : '3D view'}>
               <Box aria-hidden="true" size={20} /> {mode === '3d' ? '2D' : '3D'}
               <span aria-hidden="true" className="max-sm:hidden">view</span>

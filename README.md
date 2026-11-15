@@ -264,6 +264,26 @@ Run its tests with `npx vitest run src/sol`.
 - **Read-aloud friendly.** Summaries, debrief, explainers and tutorial steps have Listen buttons with text written for speech (short sentences, amounts in words such as "8 kWh of power", no symbols a voice would stumble on; a test checks the explainers).
 - **Colour-blind safe.** Good and bad are never shown by colour alone: arrows, ticks, locks, stars, the words LOW / up / down and numbers always go with them. The new "Colour-blind friendly colours" setting also swaps green and red for sky blue and amber (Okabe–Ito palette).
 
+## Music and sound
+
+| Where | Sound | File |
+| --- | --- | --- |
+| Lobby: sign-in pages, Mission Control and other pages | Lobby music (loops) | `public/audio/lobby.mp3` |
+| NOLA Academy and lessons | Module music theme (loops) | `public/audio/module-theme.mp3` |
+| Station game, 2D and 3D | Simulation 1, then Simulation 2, in turn | `public/audio/simulation-1.mp3`, `simulation-2.mp3` |
+| While the astronaut walks | Footsteps | `public/audio/footsteps.mp3` |
+
+The audio files were supplied by the project owner. They were levelled to about −18 LUFS with a −1.5 dB true-peak ceiling (the originals were mastered at −14 LUFS, a streaming level, with peaks at 0 dBFS), re-encoded at 128 kbps (music) and 96 kbps (footsteps), cutting the total from 11.5 MB to 4.4 MB. The footstep clip was trimmed to exactly nine steps so it loops in rhythm.
+
+How it works (`src/features/audio/`):
+
+- **Buses.** Music → duck bus → master, and footsteps → effects bus → master, built with Web Audio gain nodes. The settings sliders set bus gains only. Each slider is squared before use, so the change feels even along its travel, and 0 is true silence.
+- **Music follows the page**, with a 1.2-second crossfade. A single track loops; the simulation tracks play one after the other. Switching between the 2D and 3D station keeps the same track playing.
+- **Ducking.** While NOLA reads aloud, the music dips to 30% through the duck bus, so the player's music setting is never overwritten.
+- **Footsteps** play while the astronaut walks: the 3D scene reports walking through `GameBridge`; in 2D (Phaser unchanged) the page watches the movement keys and joystick. Each pass of the loop plays at a slightly different speed, so the steps do not sound mechanical.
+- **Browser rules.** Nothing plays until the first click, tap or key press. The sound pauses when the tab is hidden. Music that is turned to 0 or muted is not downloaded at all.
+- **Settings.** Music volume, sound effects volume and "Mute all sound" are in the accessibility settings, saved with the account; a Sound on/off button sits on the station screen.
+
 ## Crew health and Astronaut Science (NASA OSDR)
 
 The sol engine tracks the crew's body as two conditions, each 0–100%, shown in the HUD:
@@ -381,7 +401,7 @@ Known limits: the rate limit is kept in server memory, so it is a first defence,
 
 - Text size (three steps), high contrast, an easy-reading font (Lexend) and reduced motion. Settings work before login and follow the account across devices.
 - Read-aloud "Listen" buttons on NOLA's speech, lesson cards and chat replies, with speed and volume.
-- Everything NOLA says is shown as text, so nothing depends on sound. The game has no audio.
+- Everything NOLA says is shown as text, so nothing depends on sound. Music and footsteps are extras: they can be turned down or muted, and nothing in the game needs them.
 - Full keyboard use: a skip link, visible focus, real buttons and radio controls, dialogs that trap focus and close with Escape.
 - The game can be played without steering: the Map lists every machine and takes the astronaut straight to it.
 - Everything in the game canvas is also described in ordinary page content: current room, nearby machine, mission tasks, resources and warnings.
@@ -406,6 +426,7 @@ If this goes beyond a hackathon demo to real children, get proper advice on chil
 - All eight lessons' content (well-formed, exactly one right answer per question, every slider activity starts unsolved and can be solved).
 - The knowledge search and NOLA's built-in replies, including the personal-information guard.
 - Space data validation, the NOAA scale thresholds, the NASA conversion and the fallback to simulated data.
+- Music and sound: the right music for each page, the simulation playlist, the slider curve, the sound settings, and that every audio file exists.
 - Ranks, badges, score and debrief (rewarding reasoning over leftovers, storm readiness, follow-through, the biggest trade-off wording), the tutorial steps, the explainers' read-aloud wording, and the saved record.
 - Crew health and Astronaut Science: exercise and rest costs, nightly body wear, the OSDR route on recorded data, quotes matching the studies, citations, the offline fallback, and which finding explains each health change.
 - Earth communication: Mars distances against NASA's recorded closest approaches, the Moon delay, how the wait is sped up, replies blocked by a broken antenna, training mistakes, and the training questions.

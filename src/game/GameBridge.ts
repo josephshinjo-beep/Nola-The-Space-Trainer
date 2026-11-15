@@ -19,6 +19,8 @@ interface BridgeEvents {
   interact: EquipmentId;
   /** The astronaut walked into a different room. */
   room: RoomId;
+  /** The astronaut started (true) or stopped (false) walking: for footstep sounds. */
+  walking: boolean;
 }
 
 type Listener<K extends keyof BridgeEvents> = (value: BridgeEvents[K]) => void;
@@ -86,6 +88,7 @@ export class GameBridge {
     nearby: new Set(),
     interact: new Set(),
     room: new Set(),
+    walking: new Set(),
   };
 
   setView(view: GameView): void {

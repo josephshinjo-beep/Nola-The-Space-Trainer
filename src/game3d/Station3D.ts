@@ -172,6 +172,7 @@ export class Station3D {
   private rig!: { hipL: THREE.Group; hipR: THREE.Group; shoulderL: THREE.Group; shoulderR: THREE.Group; torso: THREE.Group };
   private walkPhase = 0;
   private walkAmount = 0;
+  private walkingReported = false;
   private spots!: { beams: THREE.Mesh[]; rings: THREE.InstancedMesh };
   private currentRoom: RoomId | null = null;
   private nearby: EquipmentId | null = null;
@@ -745,6 +746,10 @@ export class Station3D {
     // While a panel or menu covers the game, nothing moves and nothing is redrawn.
     if (this.options.bridge.paused) {
       this.keys.clear();
+      if (this.walkingReported) {
+        this.walkingReported = false;
+        this.options.bridge.emit('walking', false);
+      }
       return;
     }
     this.update(dt);
@@ -836,6 +841,10 @@ export class Station3D {
   private animateWalk(dt: number, speed: number): void {
     const moving = speed > 0.05;
     this.walkAmount += ((moving ? 1 : 0) - this.walkAmount) * damp(dt, 0.1);
+    if (moving !== this.walkingReported) {
+      this.walkingReported = moving;
+      this.options.bridge.emit('walking', moving);
+    }
     // About two steps per second at full speed.
     if (moving) this.walkPhase += dt * 9 * Math.min(1, speed);
     const swing = Math.sin(this.walkPhase) * this.walkAmount;

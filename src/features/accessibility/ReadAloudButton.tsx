@@ -1,5 +1,6 @@
 import { Square, Volume2 } from 'lucide-react';
 import { useEffect, useState } from 'react';
+import { audio } from '../audio/audioEngine';
 import { useSettings } from './SettingsContext';
 
 const canSpeak = typeof window !== 'undefined' && 'speechSynthesis' in window;
@@ -20,6 +21,12 @@ interface ReadAloudButtonProps {
 export function ReadAloudButton({ text, className = '', tone = 'light' }: ReadAloudButtonProps) {
   const { settings } = useSettings();
   const [speaking, setSpeaking] = useState(false);
+
+  // The music dips while NOLA is speaking, so her words are easy to hear.
+  useEffect(() => {
+    audio.duck(speaking);
+    return () => audio.duck(false);
+  }, [speaking]);
 
   // Stop talking if the button leaves the screen (for example, on page change).
   useEffect(() => {

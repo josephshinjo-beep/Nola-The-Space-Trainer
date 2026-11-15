@@ -18,6 +18,12 @@ export interface AccessibilitySettings {
   speechRate: SpeechRate;
   /** Voice volume from 0 (silent) to 1 (full). */
   voiceVolume: number;
+  /** Background music volume, 0 (off) to 1. */
+  musicVolume: number;
+  /** Sound effects (footsteps) volume, 0 (off) to 1. */
+  sfxVolume: number;
+  /** Turns every sound off at once. */
+  muted: boolean;
 }
 
 export const DEFAULT_SETTINGS: AccessibilitySettings = {
@@ -29,12 +35,17 @@ export const DEFAULT_SETTINGS: AccessibilitySettings = {
   readAloud: true,
   speechRate: 'normal',
   voiceVolume: 1,
+  musicVolume: 0.45,
+  sfxVolume: 0.7,
+  muted: false,
 };
 
 const TEXT_SIZES: readonly TextSize[] = ['normal', 'large', 'xlarge'];
 const SPEECH_RATES: readonly SpeechRate[] = ['slow', 'normal'];
 
 const bool = (value: unknown, fallback: boolean) => (typeof value === 'boolean' ? value : fallback);
+/** A number from 0 to 1, or the fallback. */
+const unit = (value: unknown, fallback: number) => (typeof value === 'number' && Number.isFinite(value) ? Math.min(1, Math.max(0, value)) : fallback);
 
 /** Turns stored data (from the browser or database) into safe, complete settings. */
 export function sanitizeSettings(raw: unknown): AccessibilitySettings {
@@ -50,6 +61,9 @@ export function sanitizeSettings(raw: unknown): AccessibilitySettings {
     readAloud: bool(data.readAloud, d.readAloud),
     speechRate: SPEECH_RATES.includes(data.speechRate as SpeechRate) ? (data.speechRate as SpeechRate) : d.speechRate,
     voiceVolume: Math.min(1, Math.max(0, volume)),
+    musicVolume: unit(data.musicVolume, d.musicVolume),
+    sfxVolume: unit(data.sfxVolume, d.sfxVolume),
+    muted: bool(data.muted, d.muted),
   };
 }
 

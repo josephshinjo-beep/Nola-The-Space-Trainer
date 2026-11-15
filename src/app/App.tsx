@@ -2,6 +2,7 @@ import { lazy, Suspense } from 'react';
 import { BrowserRouter, Route, Routes } from 'react-router';
 import { SettingsProvider } from '../features/accessibility/SettingsContext';
 import { AuthProvider } from '../features/auth/AuthContext';
+import { SoundDirector } from '../features/audio/SoundDirector';
 import { LoginPage } from '../features/auth/LoginPage';
 import { RegisterPage } from '../features/auth/RegisterPage';
 import { ResetPasswordPage } from '../features/auth/ResetPasswordPage';
@@ -41,6 +42,7 @@ export default function App() {
     <BrowserRouter>
       <AuthProvider>
         <SettingsProvider>
+          <SoundDirector />
           <Routes>
             <Route element={<PublicOnlyRoute />}>
               <Route path="/login" element={<LoginPage />} />
