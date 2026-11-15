@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { startCursorGlow } from './cursorGlow';
 import { createSpaceBackground, SPACE_CONFIG, type SpaceBackground } from './SpaceBackground';
 
 /**
@@ -9,7 +10,8 @@ import { createSpaceBackground, SPACE_CONFIG, type SpaceBackground } from './Spa
  * mouse and touch, so they can never get in the way of the interface:
  *   1. A photo of the Milky Way taken by the Artemis II crew (credit: NASA),
  *      drifting very slowly (CSS, see .space-photo in index.css).
- *   2. A see-through canvas with twinkling stars and shooting stars.
+ *   2. A coloured glow that follows the mouse (cursorGlow.ts).
+ *   3. A see-through canvas with twinkling stars and shooting stars.
  */
 
 let instance: SpaceBackground | null = null;
@@ -49,6 +51,9 @@ function wantsStillness(): boolean {
 
 export function SpaceBackdrop() {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const glowRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => (glowRef.current ? startCursorGlow(glowRef.current) : undefined), []);
 
   useEffect(() => {
     if (!canvasRef.current) return;
@@ -83,6 +88,18 @@ export function SpaceBackdrop() {
   return (
     <>
       <div aria-hidden="true" className="space-photo" />
+      <div ref={glowRef} aria-hidden="true" className="cursor-glow">
+        <div className="cursor-glow__halo">
+          <i />
+          <i />
+          <i />
+        </div>
+        <div className="cursor-glow__core">
+          <i />
+          <i />
+          <i />
+        </div>
+      </div>
       <canvas ref={canvasRef} aria-hidden="true" className="space-backdrop" />
     </>
   );
