@@ -1,4 +1,4 @@
-import { BookOpen, CircleCheck, Send, ShieldCheck, TriangleAlert } from 'lucide-react';
+import { BookOpen, Send, ShieldCheck, TriangleAlert } from 'lucide-react';
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { Button } from '../components/Button';
@@ -60,6 +60,11 @@ export function CompanionPage() {
     };
   }, [user]);
 
+  // Children see a plain message; the technical reason goes to the browser console for whoever looks after the server.
+  useEffect(() => {
+    if (aiStatus.state === 'off' || aiStatus.state === 'trouble') console.warn(`NOLA AI ${aiStatus.state}: ${aiStatus.reason}`);
+  }, [aiStatus]);
+
   useEffect(() => {
     listEnd.current?.scrollIntoView({ block: 'nearest' });
   }, [messages, thinking]);
@@ -116,27 +121,16 @@ export function CompanionPage() {
         </div>
       </header>
 
-      {aiStatus.state === 'connected' && (
-        <p role="status" data-testid="ai-status" className="flex items-start gap-2 rounded-2xl border-2 border-go bg-go/10 px-4 py-3 font-semibold text-go">
-          <CircleCheck aria-hidden="true" size={22} className="mt-0.5 shrink-0" />
-          <span>
-            AI key is working. NOLA is answering with {aiStatus.provider ?? 'AI'}
-            {aiStatus.model ? ` (${aiStatus.model})` : ''}.
-          </span>
-        </p>
-      )}
       {aiStatus.state === 'trouble' && (
         <p role="status" data-testid="ai-status" className="flex items-start gap-2 rounded-2xl border-2 border-nola-soft bg-nola/10 px-4 py-3 font-semibold text-nola-soft">
           <TriangleAlert aria-hidden="true" size={22} className="mt-0.5 shrink-0" />
-          <span>The AI could not answer that question ({aiStatus.reason}), so NOLA used its built-in notes. It will try the AI again next time.</span>
+          <span>NOLA couldn't reach its AI brain for that one, so it answered from its built-in notes. It will try again next time.</span>
         </p>
       )}
       {aiStatus.state === 'off' && (
-        <p role="alert" data-testid="ai-status" className="flex items-start gap-2 rounded-2xl border-2 border-alert bg-alert/10 px-4 py-3 font-semibold text-alert">
+        <p role="status" data-testid="ai-status" className="flex items-start gap-2 rounded-2xl border-2 border-nola-soft bg-nola/10 px-4 py-3 font-semibold text-nola-soft">
           <TriangleAlert aria-hidden="true" size={22} className="mt-0.5 shrink-0" />
-          <span>
-            AI key is not working: {aiStatus.reason}. Until it is fixed, NOLA uses built-in answers.
-          </span>
+          <span>NOLA's AI brain is resting right now, so it is answering from its built-in notes.</span>
         </p>
       )}
 

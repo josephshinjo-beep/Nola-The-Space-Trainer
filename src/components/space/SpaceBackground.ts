@@ -7,7 +7,8 @@
  * stop(), resize(), destroy(), setSpeed() and setStatic().
  *
  * Layers, back to front:
- *   1. Gradient + nebula clouds   (painted once to a hidden canvas, then panned)
+ *   1. Gradient + nebula clouds   (painted once to a hidden canvas, then panned;
+ *                                  skipped with `transparent`, to let a photo show through)
  *   2. A faint spiral galaxy      (painted once, rotated very slowly)
  *   3. Far, mid and near stars    (drift, wrap round the edges, twinkle)
  *   4. An occasional shooting star
@@ -84,6 +85,8 @@ export interface SpaceBackgroundConfig {
     life: number;
     opacity: number;
   };
+  /** Leave the sky see-through (no gradient or clouds), so a photo underneath shows; only stars and shooting stars are drawn. */
+  transparent: boolean;
   /** Log the average frame cost to the console once, after a few seconds. */
   debug: boolean;
 }
@@ -116,6 +119,7 @@ export const SPACE_CONFIG: SpaceBackgroundConfig = {
   },
   galaxy: { enabled: true, x: 0.72, y: 0.34, size: 0.7, opacity: 0.1, rotationPeriod: 900 },
   shootingStar: { enabled: true, minGap: 4, maxGap: 8, speed: 800, length: 140, life: 0.8, opacity: 0.7 },
+  transparent: false,
   debug: false,
 };
 
@@ -167,10 +171,10 @@ function makeCanvas(width: number, height: number): HTMLCanvasElement {
 
 /** Returns null if the browser cannot draw on a canvas; the page background colour shows instead. */
 export function createSpaceBackground(canvas: HTMLCanvasElement, overrides: Partial<SpaceBackgroundConfig> = {}): SpaceBackground | null {
-  const maybeContext = canvas.getContext('2d', { alpha: false });
+  const config: SpaceBackgroundConfig = { ...SPACE_CONFIG, ...overrides };
+  const maybeContext = canvas.getContext('2d', { alpha: config.transparent });
   if (!maybeContext) return null;
   const ctx: CanvasRenderingContext2D = maybeContext;
-  const config: SpaceBackgroundConfig = { ...SPACE_CONFIG, ...overrides };
 
   let width = 0;
   let height = 0;
@@ -202,6 +206,10 @@ export function createSpaceBackground(canvas: HTMLCanvasElement, overrides: Part
 
   /** Gradient plus nebula clouds, a little larger than the screen so it can be panned. */
   function paintBackdrop(): void {
+    if (config.transparent) {
+      backdrop = null;
+      return;
+    }
     const margin = config.nebula.drift * 2;
     // Painted at half resolution: it is all soft blur, and it is cheaper to draw.
     const scale = 0.5;
@@ -382,7 +390,9 @@ export function createSpaceBackground(canvas: HTMLCanvasElement, overrides: Part
     ctx.globalAlpha = 1;
 
     // 1. Gradient and nebula: one image, slowly panned. It also clears the frame.
-    if (backdrop) {
+    if (config.transparent) {
+      ctx.clearRect(0, 0, width, height);
+    } else if (backdrop) {
       const margin = config.nebula.drift * 2;
       const turn = (clock / config.nebula.driftPeriod) * TAU;
       const panX = (Math.sin(turn) * 0.5 + 0.5) * margin * width;

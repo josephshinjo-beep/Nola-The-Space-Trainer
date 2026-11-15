@@ -115,6 +115,17 @@ export const DATA_SOURCES: DataSource[] = [
     link: 'https://ntrs.nasa.gov/search?q=%22NASA-STD-3001%22',
     files: ['src/sol/config.ts'],
   },
+  {
+    id: 'artemis-milky-way',
+    name: 'Background photo: "Starstruck", the Milky Way photographed by the Artemis II crew',
+    provider: 'NASA Image and Video Library (photo art002e012588, April 7, 2026, credit: NASA)',
+    what: 'A real photograph of our galaxy taken by the Artemis II astronauts. It is decoration, not data.',
+    usedFor: 'The slowly drifting space background behind the app’s pages. It is cropped to a widescreen shape and darkened so text stays readable.',
+    access: 'Built-in reference values',
+    endpoints: [],
+    link: 'https://images.nasa.gov/details/art002e012588',
+    files: ['public/media/space-bg-4k.webp', 'public/media/space-bg-1080.webp', 'src/index.css'],
+  },
 ];
 
 // ---------------------------------------------------------------- real versus simplified numbers

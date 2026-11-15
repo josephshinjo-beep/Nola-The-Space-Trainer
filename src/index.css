@@ -101,6 +101,43 @@
  * The animated space background (src/components/space). Fixed to the
  * screen, behind everything, and it ignores the mouse and touch.
  */
+/*
+ * The Milky Way photo (Artemis II crew, credit NASA) under the star canvas.
+ * Phones and ordinary screens get the 1080p file; big or sharp screens get 4K.
+ * A dark navy wash keeps text readable, and the photo drifts and zooms very
+ * slowly (90 s each way). With reduced motion it stays still.
+ */
+.space-photo {
+  position: fixed;
+  inset: -6%;
+  z-index: -2;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 50% 40%, rgb(7 11 31 / 0.1), rgb(7 11 31 / 0.55) 90%),
+    linear-gradient(160deg, rgb(20 11 46 / 0.3), rgb(5 7 26 / 0.2)),
+    url('/media/space-bg-1080.webp') center / cover no-repeat,
+    #070b1f;
+  animation: space-drift 90s ease-in-out infinite alternate;
+  will-change: transform;
+}
+@media (min-width: 1600px), (min-width: 1000px) and (min-resolution: 2dppx) {
+  .space-photo {
+    background:
+      radial-gradient(ellipse at 50% 40%, rgb(7 11 31 / 0.1), rgb(7 11 31 / 0.55) 90%),
+      linear-gradient(160deg, rgb(20 11 46 / 0.3), rgb(5 7 26 / 0.2)),
+      url('/media/space-bg-4k.webp') center / cover no-repeat,
+      #070b1f;
+  }
+}
+@keyframes space-drift {
+  from { transform: scale(1) translate(-1.5%, -1%) rotate(-0.6deg); }
+  to { transform: scale(1.06) translate(1.5%, 1%) rotate(0.6deg); }
+}
+html[data-motion="reduced"] .space-photo { animation: none; }
+@media (prefers-reduced-motion: reduce) {
+  .space-photo { animation: none; }
+}
+
 .space-backdrop {
   position: fixed;
   inset: 0;
@@ -142,7 +179,9 @@ html[data-contrast="high"] {
   --color-alert: #ffb3bf;
   --color-go: #8dffc4;
 }
-html[data-contrast="high"] .space-backdrop { display: none; }
+html[data-contrast="high"] .space-backdrop,
+html[data-contrast="high"] .space-photo,
+html[data-backdrop="covered"] .space-photo { display: none; }
 
 /*
  * Colour-blind safe: "good" and "bad" become sky blue and amber (from the
