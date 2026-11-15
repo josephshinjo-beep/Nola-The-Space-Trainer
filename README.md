@@ -87,7 +87,7 @@ The server functions in `api/` also run under `npm run dev`. To use the AI chat 
 
 ### One-time Firebase console setup
 
-1. **Authentication → Sign-in method →** enable **Email/Password**.
+1. **Authentication → Sign-in method →** enable **Email/Password**, and **Anonymous** (for the guest / test mode button).
 2. **Firestore Database → Create database** (production mode).
 3. **Firestore Database → Rules →** paste the contents of [`firestore.rules`](firestore.rules) and click **Publish**.
 
@@ -263,6 +263,16 @@ Run its tests with `npx vitest run src/sol`.
 - **Ranks**, Cadet → Crew Member → Flight Engineer → Mission Specialist → Commander, from rank points: 1 per Academy module, 2 per badge, 5 for completing a mission. Commander also needs a completed mission scoring at least 60, so it takes good reasoning, not just time. Badges, best score and completed missions are saved at `users/{uid}/simulation/record`, so restarting the station keeps them; restarting the whole course clears them.
 - **Read-aloud friendly.** Summaries, debrief, explainers and tutorial steps have Listen buttons with text written for speech (short sentences, amounts in words such as "8 kWh of power", no symbols a voice would stumble on; a test checks the explainers).
 - **Colour-blind safe.** Good and bad are never shown by colour alone: arrows, ticks, locks, stars, the words LOW / up / down and numbers always go with them. The new "Colour-blind friendly colours" setting also swaps green and red for sky blue and amber (Okabe–Ito palette).
+
+## Guest mode (test mode)
+
+The login page has **Try as a guest (test mode)**: no email or password. It uses Firebase anonymous sign-in, so a guest gets a temporary account and everything works as for a full account (saving, missions, the AI chat). The guest profile is called "Guest Astronaut". From the sidebar (or the **Guest** button on phones) the guest can:
+
+- **Unlock all modules (test)**: marks all eight Academy modules as passed, so testers can see every room and feature straight away.
+- **Keep your progress**: create an account with a name, email and password. The guest account is linked to it, so every lesson, mission and badge stays.
+- **Leave guest mode**: signs out and deletes everything the guest saved, then the temporary account itself, so nothing about a child is kept. "Log out" does the same for guests, after a confirmation, because a temporary account cannot be opened again.
+
+Needs **Anonymous** switched on in Firebase (see the set-up steps above); until then the button explains that. The database rules need no change: a guest is a signed-in user who can only reach their own folder.
 
 ## Music and sound
 

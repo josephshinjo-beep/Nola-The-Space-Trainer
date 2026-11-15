@@ -1,6 +1,10 @@
 import {
   createUserWithEmailAndPassword,
+  deleteUser,
+  EmailAuthProvider,
+  linkWithCredential,
   onAuthStateChanged,
+  signInAnonymously,
   sendPasswordResetEmail,
   signInWithEmailAndPassword,
   signOut,
@@ -9,7 +13,7 @@ import {
 } from 'firebase/auth';
 import { createContext, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { auth } from '../../services/firebase';
-import { createUserProfile, subscribeToUserProfile } from '../../services/userRepository';
+import { createUserProfile, deleteUserProfile, subscribeToUserProfile, updateDisplayName } from '../../services/userRepository';
 import type { UserProfile } from '../../types/user';
 
 /**
@@ -29,13 +33,24 @@ interface AuthContextValue {
   profile: UserProfile | null;
   /** Set when the profile could not be loaded or created. */
   profileError: string | null;
+  /** True for a guest (test mode): signed in without an email, through Firebase anonymous sign-in. */
+  isGuest: boolean;
   register: (displayName: string, email: string, password: string) => Promise<void>;
+  /** Try the app as a guest: no email or password needed. */
+  continueAsGuest: () => Promise<void>;
+  /** Turns the guest into a full account, keeping everything they have done. */
+  saveGuestAccount: (displayName: string, email: string, password: string) => Promise<void>;
+  /** Leaves guest mode: deletes the guest's saved data and their temporary account. */
+  leaveGuestMode: (deleteData: (uid: string) => Promise<void>) => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
   sendPasswordReset: (email: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
+
+/** The profile name every guest starts with (2-20 characters, as the database rules require). */
+export const GUEST_NAME = 'Guest Astronaut';
 
 const PROFILE_ERROR =
   "We couldn't load your astronaut profile. Check your connection and refresh the page.";
@@ -107,6 +122,41 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         } catch (error) {
           pendingDisplayName.current = null;
           throw error;
+        }
+      },
+      isGuest: user?.isAnonymous ?? false,
+      continueAsGuest: async () => {
+        pendingDisplayName.current = GUEST_NAME;
+        try {
+          await signInAnonymously(auth);
+        } catch (error) {
+          pendingDisplayName.current = null;
+          throw error;
+        }
+      },
+      saveGuestAccount: async (displayName, email, password) => {
+        const current = auth.currentUser;
+        if (!current?.isAnonymous) throw new Error('Not a guest');
+        // Linking keeps the same account id, so every saved lesson, mission and badge stays.
+        const credential = await linkWithCredential(current, EmailAuthProvider.credential(email.trim(), password));
+        const name = displayName.trim();
+        await updateProfile(credential.user, { displayName: name });
+        await updateDisplayName(credential.user.uid, name);
+        // Refresh so the app sees a full account (isAnonymous is now false).
+        await credential.user.reload();
+        setUser(auth.currentUser);
+      },
+      leaveGuestMode: async (deleteData) => {
+        const current = auth.currentUser;
+        if (!current?.isAnonymous) return signOut(auth);
+        // Nothing about a guest is kept: their data first, then the temporary account.
+        try {
+          await deleteData(current.uid);
+          await deleteUserProfile(current.uid);
+          await deleteUser(current);
+        } catch (error) {
+          console.error('Could not fully remove the guest account', error);
+          await signOut(auth);
         }
       },
       login: async (email, password) => {

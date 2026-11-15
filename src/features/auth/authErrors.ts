@@ -12,6 +12,9 @@ const MESSAGES: Record<string, string> = {
   'auth/user-disabled': 'This account has been switched off. Ask a grown-up for help.',
   'auth/too-many-requests': 'Too many tries. Take a short break and try again in a few minutes.',
   'auth/network-request-failed': "We can't reach mission servers. Check your internet connection.",
+  'auth/credential-already-in-use': 'An astronaut already uses that email. Choose another email to save your guest progress.',
+  'auth/provider-already-linked': 'This guest has already been saved as an account.',
+  'auth/requires-recent-login': 'Please log in again, then try once more.',
   'auth/operation-not-allowed':
     'Email sign-in is not switched on for this project yet (Firebase console → Authentication).',
 };

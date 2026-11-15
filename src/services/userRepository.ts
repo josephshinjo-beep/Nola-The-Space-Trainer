@@ -1,4 +1,5 @@
 import {
+  deleteDoc,
   doc,
   onSnapshot,
   serverTimestamp,
@@ -66,6 +67,11 @@ export async function createUserProfile(uid: string, displayName: string): Promi
 
 export async function updateDisplayName(uid: string, displayName: string): Promise<void> {
   await updateDoc(userDoc(uid), { displayName, updatedAt: serverTimestamp() });
+}
+
+/** Removes a profile (used when a guest leaves guest mode). */
+export async function deleteUserProfile(uid: string): Promise<void> {
+  await deleteDoc(userDoc(uid));
 }
 
 export async function updateAvatar(uid: string, avatar: AvatarConfig): Promise<void> {

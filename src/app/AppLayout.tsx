@@ -1,9 +1,11 @@
-import { Database, LogOut } from 'lucide-react';
+import { Database, FlaskConical, LogOut } from 'lucide-react';
+import { useState } from 'react';
 import { Link, NavLink, Outlet, useLocation } from 'react-router';
 import { Logo } from '../components/Logo';
 import { VideoBackdrop } from '../components/VideoBackdrop';
 import { AcademyProgressProvider } from '../features/academy/AcademyProgressContext';
 import { useAuth } from '../features/auth/AuthContext';
+import { GuestModal } from '../features/auth/GuestMode';
 import { AstronautAvatar } from '../features/profile/AstronautAvatar';
 import { NAV_ITEMS } from './navigation';
 
@@ -13,13 +15,17 @@ import { NAV_ITEMS } from './navigation';
  * that is easy to reach with thumbs.
  */
 export function AppLayout() {
-  const { profile, logout } = useAuth();
+  const { profile, logout, isGuest } = useAuth();
+  const [guestOpen, setGuestOpen] = useState(false);
+  // A guest cannot log back in to a temporary account, so "log out" opens the guest options instead.
+  const signOut = () => (isGuest ? setGuestOpen(true) : void logout());
   // The game fills the whole screen; every other page sits in a centred column.
   const { pathname } = useLocation();
   // The game pages fill the screen.
   const fullScreen = pathname === '/mission' || pathname === '/mission3d';
 
   return (
+    <AcademyProgressProvider>
     <div className="lg:flex">
       {/* The moving galaxy sits behind Mission Control, the app's lobby. */}
       {pathname === '/' && <VideoBackdrop />}
@@ -63,17 +69,27 @@ export function AppLayout() {
           <div className="flex items-center gap-3">
             {profile && <AstronautAvatar avatar={profile.avatar} size={44} className="shrink-0" />}
             <div className="min-w-0">
-              <p className="text-sm text-mist">Signed in as</p>
+              <p className="text-sm text-mist">{isGuest ? 'Exploring as a guest' : 'Signed in as'}</p>
               <p className="truncate font-display text-lg font-semibold">{profile?.displayName ?? '…'}</p>
             </div>
           </div>
+          {isGuest && (
+            <button
+              type="button"
+              onClick={() => setGuestOpen(true)}
+              className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-full border-2 border-glow bg-glow/10 font-semibold"
+            >
+              <FlaskConical aria-hidden="true" size={18} />
+              Guest mode (test)
+            </button>
+          )}
           <button
             type="button"
-            onClick={() => void logout()}
+            onClick={signOut}
             className="mt-3 flex min-h-11 w-full items-center justify-center gap-2 rounded-full border-2 border-line font-semibold text-mist transition hover:border-glow hover:text-star"
           >
             <LogOut aria-hidden="true" size={18} />
-            Log out
+            {isGuest ? 'Leave guest mode' : 'Log out'}
           </button>
         </div>
       </aside>
@@ -82,10 +98,15 @@ export function AppLayout() {
         {/* Top bar (phones) */}
         <header className="flex items-center justify-between border-b-2 border-line bg-hull/80 px-4 py-3 backdrop-blur lg:hidden">
           <Logo />
+          {isGuest && (
+            <button type="button" onClick={() => setGuestOpen(true)} className="ml-auto mr-2 flex h-12 items-center gap-2 rounded-full border-2 border-glow bg-glow/10 px-3 text-sm font-bold">
+              <FlaskConical aria-hidden="true" size={18} /> Guest
+            </button>
+          )}
           <button
             type="button"
-            onClick={() => void logout()}
-            aria-label="Log out"
+            onClick={signOut}
+            aria-label={isGuest ? 'Leave guest mode' : 'Log out'}
             className="flex h-12 w-12 items-center justify-center rounded-full border-2 border-line text-mist"
           >
             <LogOut aria-hidden="true" size={20} />
@@ -97,9 +118,7 @@ export function AppLayout() {
           tabIndex={-1}
           className={fullScreen ? 'h-[calc(100dvh-8.75rem)] outline-none lg:h-dvh' : 'mx-auto max-w-5xl px-4 pb-32 pt-6 outline-none sm:px-8 lg:py-10'}
         >
-          <AcademyProgressProvider>
-            <Outlet />
-          </AcademyProgressProvider>
+          <Outlet />
         </main>
       </div>
 
@@ -129,5 +148,7 @@ export function AppLayout() {
         </ul>
       </nav>
     </div>
+      <GuestModal open={guestOpen} onClose={() => setGuestOpen(false)} />
+    </AcademyProgressProvider>
   );
 }
