@@ -5,8 +5,8 @@ import { audio, sliderToGain } from '../../audio/audioEngine';
 
 /**
  * A short full-screen animation after a mission challenge: NOLA turns into a
- * ship, jumps to warp and flies into the station. It then hands over to the
- * unlock screen. It can be skipped with the button or Escape, and is not
+ * ship, jumps to warp and flies into the station. The lesson then opens the
+ * station game. It can be skipped with the button or Escape, and is not
  * shown at all with "Reduce motion" on (the caller checks that).
  */
 export function LaunchCinematic({ onDone }: { onDone: () => void }) {

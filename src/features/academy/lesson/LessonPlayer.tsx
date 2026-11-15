@@ -1,6 +1,6 @@
 import { ArrowLeft, ArrowRight, Check, KeyRound } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-import { Link } from 'react-router';
+import { Link, useNavigate } from 'react-router';
 import { Button, buttonClasses } from '../../../components/Button';
 import { ReadAloudButton } from '../../accessibility/ReadAloudButton';
 import { NolaMascot } from '../../companion/NolaMascot';
@@ -150,6 +150,7 @@ export function LessonPlayer({ module, lesson }: LessonPlayerProps) {
   // Resume at the saved stage; a completed lesson reopens at the start for review.
   const [stage, setStage] = useState(() => (saved.completed ? STAGE.intro : Math.min(saved.stage, STAGE.challenge)));
   const [launching, setLaunching] = useState(false);
+  const navigate = useNavigate();
   const [exploreSolved, setExploreSolved] = useState(saved.stage > STAGE.explore || saved.completed);
   const [challengeSolved, setChallengeSolved] = useState(saved.challengeDone);
   const [saveError, setSaveError] = useState(false);
@@ -269,8 +270,10 @@ export function LessonPlayer({ module, lesson }: LessonPlayerProps) {
         {launching && (
           <LaunchCinematic
             onDone={() => {
+              // The ship has flown into the station: carry on straight into the game.
               setLaunching(false);
               setStage(STAGE.unlock);
+              void navigate('/mission');
             }}
           />
         )}
