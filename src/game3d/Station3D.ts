@@ -4,6 +4,7 @@ import type { GameBridge } from '../game/GameBridge';
 import { buildWalkGrid, COLS, EQUIPMENT, PLAYER_START, ROOMS, roomAtTile, ROWS, standingSpot, TILE, type EquipmentId } from '../game/stationMap';
 import { angleDelta, CAMERA_FOV, cameraOffset, damp, FOLLOW_LAG, LOOK_LEAD, screenToWorld, snapYaw, type YawSnap } from './camera';
 import { cameraSide, edgeLips, FADED_OPACITY, wallHeight, wallTiles } from './level';
+import { buildMachine, type MachineModel } from './machines';
 
 /**
  * The 3D station view: a fixed high-angle diagonal camera following a blocky
@@ -165,7 +166,8 @@ export class Station3D {
   private seenVersion = -1;
   private lockedKey = '';
   private doors!: THREE.InstancedMesh;
-  private screens!: THREE.InstancedMesh;
+  private machines: { id: EquipmentId; model: MachineModel; opacity: number }[] = [];
+  private machineFade!: FadeGroup;
   private hemisphere!: THREE.HemisphereLight;
   private markers!: { objective: THREE.Mesh; urgent: THREE.Mesh; alerts: THREE.InstancedMesh; plates: THREE.InstancedMesh; focus: THREE.Mesh; outline: THREE.Group };
   private labels!: { name: HTMLDivElement; prompt: HTMLDivElement; objective: HTMLDivElement; urgent: HTMLDivElement };
@@ -393,21 +395,30 @@ export class Station3D {
   }
 
   /** The station's machines as simple blocks with a glowing screen on top. */
+  /**
+   * The machines, each with its own model (machines.ts): the Command
+   * Console is an arcade cabinet, the Grow Bed has plants, and so on. An
+   * invisible box over each one joins the fade system, so a machine that
+   * hides the astronaut fades just like a wall.
+   */
   private buildMachines(): void {
-    const body = new THREE.InstancedMesh(this.track(new THREE.BoxGeometry(0.8, 0.9, 0.8).translate(0, 0.45, 0)), this.track(fadeableMaterial(0x5b6a8f)), EQUIPMENT.length);
-    const screen = new THREE.InstancedMesh(this.track(new THREE.BoxGeometry(0.62, 0.06, 0.62)), this.track(fadeableMaterial(0xffffff, 0x0b3a40)), EQUIPMENT.length);
-    this.screens = screen;
+    const colliders = new THREE.InstancedMesh(this.track(new THREE.BoxGeometry(0.86, 1.3, 0.86).translate(0, 0.65, 0)), this.track(new THREE.MeshBasicMaterial({ visible: false })), EQUIPMENT.length);
     const matrix = new THREE.Matrix4();
-    EQUIPMENT.forEach((item, index) => {
-      body.setMatrixAt(index, matrix.makeTranslation(item.x + 0.5, 0, item.y + 0.5));
-      screen.setMatrixAt(index, matrix.makeTranslation(item.x + 0.5, 0.93, item.y + 0.5));
+    this.machines = EQUIPMENT.map((item, index) => {
+      colliders.setMatrixAt(index, matrix.makeTranslation(item.x + 0.5, 0, item.y + 0.5));
+      const model = buildMachine(item.id);
+      model.group.position.set(item.x + 0.5, 0, item.y + 0.5);
+      // Fronts face the camera's usual side: top-row and corridor machines face
+      // the corridor (+z); bottom-row machines face east (+x), so their fronts
+      // are visible instead of their backs, beside the spot where you use them.
+      model.group.rotation.y = item.y < ROWS / 2 ? 0 : Math.PI / 2;
+      this.scene.add(model.group);
+      return { id: item.id, model, opacity: 1 };
     });
-    body.computeBoundingSphere();
-    body.castShadow = true;
-    body.receiveShadow = true;
-    this.paintScreens([]);
-    this.scene.add(body, screen);
-    this.fadeGroups.push(new FadeGroup([body, screen]));
+    colliders.computeBoundingSphere();
+    this.scene.add(colliders);
+    this.machineFade = new FadeGroup([colliders]);
+    this.fadeGroups.push(this.machineFade);
   }
 
   /** A barrier on every door; only the doors of locked rooms are shown (and block walking). */
@@ -430,13 +441,6 @@ export class Station3D {
     });
     this.doors.instanceMatrix.needsUpdate = true;
     this.doors.computeBoundingSphere();
-  }
-
-  /** Machines that are switched on and working have bright screens. */
-  private paintScreens(running: readonly EquipmentId[]): void {
-    const color = new THREE.Color();
-    EQUIPMENT.forEach((item, index) => this.screens.setColorAt(index, color.setHex(running.includes(item.id) ? 0x5ff0ff : 0x2a5a66)));
-    if (this.screens.instanceColor) this.screens.instanceColor.needsUpdate = true;
   }
 
   /**
@@ -612,7 +616,8 @@ export class Station3D {
     const { view } = this.options.bridge;
     this.seenVersion = this.options.bridge.viewVersion;
     this.applyLocks(view.lockedRooms);
-    this.paintScreens(view.running);
+    // The Grow Bed shows the crop as it grows.
+    this.machines.find((machine) => machine.id === 'growbed')?.model.setCrop?.(view.cropStage);
     const matrix = new THREE.Matrix4();
     EQUIPMENT.forEach((item, index) => {
       const on = view.alerts.includes(item.id);
@@ -648,6 +653,20 @@ export class Station3D {
       group.setFaded(hits[index]!);
       group.step(dt);
     });
+    // Machine models follow their invisible box's fade.
+    this.machines.forEach((machine, index) => {
+      const opacity = this.machineFade.opacity[index]!;
+      if (Math.abs(opacity - machine.opacity) < 0.001) return;
+      machine.opacity = opacity;
+      machine.model.setOpacity(opacity);
+    });
+  }
+
+  /** Moving parts: fans, dishes, bubbles, screens. Running machines light up. */
+  private animateMachines(): void {
+    const { view } = this.options.bridge;
+    const state = { storm: view.storm, still: view.reducedMotion };
+    for (const machine of this.machines) machine.model.animate(this.time, { ...state, running: view.running.includes(machine.id) });
   }
 
   /** Floor is every room, corridor and door tile (machines stand on floor too). */
@@ -828,6 +847,7 @@ export class Station3D {
     this.updateMarkers();
     this.updateLamps(dt);
     this.updateDust(dt);
+    this.animateMachines();
     // The sun and its small shadow map follow the astronaut.
     this.sun.target.position.set(p.x, 0, p.z);
     this.sun.position.set(p.x - 5, 12, p.z + 3);
@@ -1035,6 +1055,7 @@ export class Station3D {
       if (object instanceof THREE.InstancedMesh) object.dispose();
     });
     this.disposables.forEach((item) => item.dispose());
+    this.machines.forEach((machine) => machine.model.dispose());
     this.renderer.dispose();
     this.renderer.domElement.remove();
     this.labels.name.remove();
