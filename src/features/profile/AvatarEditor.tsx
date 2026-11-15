@@ -5,7 +5,10 @@ import { useAuth } from '../auth/AuthContext';
 import { AstronautAvatar } from './AstronautAvatar';
 import {
   ACCESSORIES,
+  applySuitStyle,
   SUIT_COLORS,
+  SUIT_STYLES,
+  type SuitStyleId,
   VISOR_COLORS,
   type AccessoryId,
   type AvatarConfig,
@@ -68,8 +71,25 @@ export function AvatarEditor() {
       </div>
 
       <div className="space-y-6">
-        <OptionGroup legend="Suit colour" options={SUIT_OPTIONS} value={avatar.suitColor} onChange={(suitColor) => change({ suitColor })} />
-        <OptionGroup legend="Visor colour" options={VISOR_OPTIONS} value={avatar.visorColor} onChange={(visorColor) => change({ visorColor })} />
+        <OptionGroup
+          legend="Suit style"
+          options={SUIT_STYLES.map((style) => ({
+            id: style.id,
+            label: style.label,
+            // A small preview of the whole suit, in this student's accessory.
+            visual: <AstronautAvatar avatar={{ ...applySuitStyle(avatar, style.id), accessory: 'none' }} size={34} className="shrink-0" />,
+          }))}
+          value={avatar.suitStyle}
+          onChange={(suitStyle: SuitStyleId) => change(applySuitStyle(avatar, suitStyle))}
+        />
+        {avatar.suitStyle === 'my-colours' ? (
+          <>
+            <OptionGroup legend="Suit colour" options={SUIT_OPTIONS} value={avatar.suitColor} onChange={(suitColor) => change({ suitColor })} />
+            <OptionGroup legend="Visor colour" options={VISOR_OPTIONS} value={avatar.visorColor} onChange={(visorColor) => change({ visorColor })} />
+          </>
+        ) : (
+          <p className="rounded-2xl border-2 border-line bg-void/50 p-3 text-base text-mist">This suit style sets every colour. To pick your own suit and visor colours, choose “My colours”.</p>
+        )}
         <OptionGroup legend="Accessory" options={ACCESSORY_OPTIONS} value={avatar.accessory} onChange={(accessory) => change({ accessory })} />
       </div>
     </div>

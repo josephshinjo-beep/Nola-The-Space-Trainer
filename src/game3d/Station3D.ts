@@ -5,6 +5,7 @@ import { buildWalkGrid, COLS, EQUIPMENT, PLAYER_START, ROOMS, roomAtTile, ROWS, 
 import { angleDelta, CAMERA_FOV, cameraOffset, damp, FOLLOW_LAG, LOOK_LEAD, screenToWorld, snapYaw, type YawSnap } from './camera';
 import { cameraSide, edgeLips, FADED_OPACITY, wallHeight, wallTiles } from './level';
 import { buildMachine, type MachineModel } from './machines';
+import { avatarPalette, type AvatarConfig } from '../features/profile/avatarOptions';
 
 /**
  * The 3D station view: a fixed high-angle diagonal camera following a blocky
@@ -171,6 +172,8 @@ export class Station3D {
   private hemisphere!: THREE.HemisphereLight;
   private markers!: { objective: THREE.Mesh; urgent: THREE.Mesh; alerts: THREE.InstancedMesh; plates: THREE.InstancedMesh; focus: THREE.Mesh; outline: THREE.Group };
   private labels!: { name: HTMLDivElement; prompt: HTMLDivElement; objective: HTMLDivElement; urgent: HTMLDivElement };
+  private suit!: Record<'suit' | 'trim' | 'helmet' | 'helmetStripe' | 'gloves' | 'boots' | 'patch' | 'visor' | 'pack', THREE.MeshLambertMaterial>;
+  private avatarKey = '';
   private rig!: { hipL: THREE.Group; hipR: THREE.Group; shoulderL: THREE.Group; shoulderR: THREE.Group; torso: THREE.Group };
   private walkPhase = 0;
   private walkAmount = 0;
@@ -611,10 +614,20 @@ export class Station3D {
       : 'radial-gradient(ellipse at center, rgba(0,0,0,0) 52%, rgba(2,4,16,0.72) 100%)';
   }
 
+  /** Dresses the astronaut in the student's suit (style or own colours), as in their profile. */
+  private applyAvatar(avatar: AvatarConfig): void {
+    const key = JSON.stringify(avatar);
+    if (key === this.avatarKey) return;
+    this.avatarKey = key;
+    const palette = avatarPalette(avatar);
+    for (const name of ['suit', 'trim', 'helmet', 'helmetStripe', 'gloves', 'boots', 'patch', 'visor'] as const) this.suit[name].color.set(palette[name]);
+  }
+
   /** Applies what React wants shown, whenever it changes. */
   private applyView(): void {
     const { view } = this.options.bridge;
     this.seenVersion = this.options.bridge.viewVersion;
+    this.applyAvatar(view.avatar);
     this.applyLocks(view.lockedRooms);
     // The Grow Bed shows the crop as it grows.
     this.machines.find((machine) => machine.id === 'growbed')?.model.setCrop?.(view.cropStage);
@@ -677,11 +690,10 @@ export class Station3D {
   /** An original blocky astronaut: white suit, cyan visor, orange backpack. */
   private buildAstronaut(): void {
     const box = this.track(new THREE.BoxGeometry(1, 1, 1));
-    const suit = this.track(new THREE.MeshLambertMaterial({ color: 0xf2f4fb }));
-    const dark = this.track(new THREE.MeshLambertMaterial({ color: 0x9aa3bf }));
-    const visor = this.track(new THREE.MeshLambertMaterial({ color: 0x3de0f5, emissive: 0x0c4a55 }));
-    const pack = this.track(new THREE.MeshLambertMaterial({ color: 0xff7a1a }));
-    const boot = this.track(new THREE.MeshLambertMaterial({ color: 0x5b6480 }));
+    // One material per part of the suit, coloured from the student's avatar (see applyAvatar).
+    const mat = () => this.track(new THREE.MeshLambertMaterial({ color: 0xffffff }));
+    const m = { suit: mat(), trim: mat(), helmet: mat(), helmetStripe: mat(), gloves: mat(), boots: mat(), patch: mat(), visor: this.track(new THREE.MeshLambertMaterial({ color: 0x3de0f5, emissive: 0x0c2a35 })), pack: this.track(new THREE.MeshLambertMaterial({ color: 0x26315f })) };
+    this.suit = m;
     const part = (parent: THREE.Object3D, material: THREE.Material, size: [number, number, number], position: [number, number, number]) => {
       const mesh = new THREE.Mesh(box, material);
       mesh.scale.set(...size);
@@ -697,24 +709,36 @@ export class Station3D {
       parent.add(pivot);
       return pivot;
     };
-    // Legs swing from the hips; each has a darker boot at the bottom.
+    // Legs swing from the hips: suit, knee patch, ankle cuff and boot.
     const hipL = joint(this.player, -0.1, 0.34);
     const hipR = joint(this.player, 0.1, 0.34);
     for (const hip of [hipL, hipR]) {
-      part(hip, dark, [0.16, 0.28, 0.18], [0, -0.14, 0]);
-      part(hip, boot, [0.17, 0.08, 0.22], [0, -0.3, 0.02]);
+      part(hip, m.suit, [0.16, 0.26, 0.18], [0, -0.13, 0]);
+      part(hip, m.patch, [0.11, 0.07, 0.02], [0, -0.12, 0.095]);
+      part(hip, m.trim, [0.17, 0.04, 0.19], [0, -0.23, 0]);
+      part(hip, m.boots, [0.17, 0.08, 0.22], [0, -0.3, 0.02]);
     }
     // The upper body bobs as a whole while walking.
     const torso = new THREE.Group();
     this.player.add(torso);
-    part(torso, suit, [0.42, 0.38, 0.26], [0, 0.53, 0]); // body
-    part(torso, pack, [0.34, 0.32, 0.12], [0, 0.56, -0.19]); // backpack
-    part(torso, suit, [0.36, 0.32, 0.32], [0, 0.88, 0]); // helmet
-    part(torso, visor, [0.28, 0.16, 0.04], [0, 0.9, 0.165]); // visor (faces +z, the front)
-    // Arms swing from the shoulders, opposite to the legs.
+    part(torso, m.suit, [0.42, 0.38, 0.26], [0, 0.53, 0]); // body
+    part(torso, m.trim, [0.06, 0.06, 0.02], [-0.11, 0.6, 0.135]); // chest hose connectors
+    part(torso, m.trim, [0.06, 0.06, 0.02], [0.11, 0.6, 0.135]);
+    part(torso, m.patch, [0.02, 0.3, 0.02], [0, 0.53, 0.135]); // zip
+    part(torso, m.pack, [0.34, 0.32, 0.12], [0, 0.56, -0.19]); // backpack
+    part(torso, m.helmet, [0.38, 0.34, 0.34], [0, 0.89, 0]); // helmet
+    part(torso, m.helmetStripe, [0.05, 0.02, 0.3], [0, 1.07, 0]); // stripe over the top
+    part(torso, m.trim, [0.04, 0.12, 0.1], [-0.2, 0.88, 0]); // ear pieces
+    part(torso, m.trim, [0.04, 0.12, 0.1], [0.2, 0.88, 0]);
+    part(torso, m.visor, [0.3, 0.2, 0.04], [0, 0.9, 0.175]); // visor (faces +z, the front)
+    // Arms swing from the shoulders: suit, wrist cuff and glove.
     const shoulderL = joint(torso, -0.28, 0.7);
     const shoulderR = joint(torso, 0.28, 0.7);
-    for (const shoulder of [shoulderL, shoulderR]) part(shoulder, suit, [0.12, 0.32, 0.14], [0, -0.16, 0]);
+    for (const shoulder of [shoulderL, shoulderR]) {
+      part(shoulder, m.suit, [0.12, 0.26, 0.14], [0, -0.13, 0]);
+      part(shoulder, m.trim, [0.13, 0.04, 0.15], [0, -0.26, 0]);
+      part(shoulder, m.gloves, [0.11, 0.08, 0.12], [0, -0.32, 0]);
+    }
     this.rig = { hipL, hipR, shoulderL, shoulderR, torso };
     this.scene.add(this.player);
   }

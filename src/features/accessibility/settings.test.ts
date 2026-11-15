@@ -33,7 +33,7 @@ describe('sanitizeAvatar', () => {
   });
 
   it('keeps valid choices', () => {
-    const avatar = { suitColor: 'mars-red', visorColor: 'sun-gold', accessory: 'headset' };
+    const avatar = { suitStyle: 'red-comet', suitColor: 'mars-red', visorColor: 'sun-gold', accessory: 'headset' };
     expect(sanitizeAvatar(avatar)).toEqual(avatar);
   });
 });
