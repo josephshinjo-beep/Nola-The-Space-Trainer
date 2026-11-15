@@ -1,3 +1,4 @@
+import { useImmersive } from '../app/immersive';
 import { Box, Volume2, VolumeX } from 'lucide-react';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Link } from 'react-router';
@@ -99,6 +100,7 @@ function buildView(state: StationState, avatar: GameView['avatar'], reducedMotio
 }
 
 function StationGame({ mode }: { mode: ViewMode }) {
+  useImmersive();
   const { user, profile } = useAuth();
   const { unlockedSystems, completedModuleIds } = useAcademyProgress();
   const { settings, update } = useSettings();
