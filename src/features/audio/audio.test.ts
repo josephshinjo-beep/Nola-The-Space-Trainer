@@ -15,7 +15,7 @@ describe('music for each part of the app', () => {
 
   it('plays the simulation music in the station game, in 2D and 3D, as a two-track playlist', () => {
     expect(musicForPath('/mission')).toBe('simulation');
-    expect(musicForPath('/mission3d')).toBe('simulation');
+    expect(musicForPath('/mission2d')).toBe('simulation');
     expect(MUSIC.simulation).toEqual(['/audio/simulation-1.mp3', '/audio/simulation-2.mp3']);
   });
 

@@ -22,7 +22,7 @@ export function AppLayout() {
   // The game fills the whole screen; every other page sits in a centred column.
   const { pathname } = useLocation();
   // The game pages fill the screen.
-  const fullScreen = pathname === '/mission' || pathname === '/mission3d';
+  const fullScreen = pathname === '/mission' || pathname === '/mission2d';
 
   return (
     <AcademyProgressProvider>

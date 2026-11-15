@@ -361,7 +361,7 @@ function StationGame({ mode }: { mode: ViewMode }) {
               {settings.muted ? <VolumeX aria-hidden="true" size={20} /> : <Volume2 aria-hidden="true" size={20} />}
               <span aria-hidden="true" className="max-sm:hidden">{settings.muted ? 'Sound off' : 'Sound on'}</span>
             </button>
-            <Link to={mode === '3d' ? '/mission' : '/mission3d'} onClick={sim.saveNow} className="pointer-events-auto flex h-12 items-center gap-2 rounded-full border-2 border-glow bg-hull/90 px-3 font-bold sm:px-4" aria-label={mode === '3d' ? '2D view' : '3D view'}>
+            <Link to={mode === '3d' ? '/mission2d' : '/mission'} onClick={sim.saveNow} className="pointer-events-auto flex h-12 items-center gap-2 rounded-full border-2 border-glow bg-hull/90 px-3 font-bold sm:px-4" aria-label={mode === '3d' ? '2D view' : '3D view'}>
               <Box aria-hidden="true" size={20} /> {mode === '3d' ? '2D' : '3D'}
               <span aria-hidden="true" className="max-sm:hidden">view</span>
             </Link>
@@ -458,7 +458,7 @@ function StationGame({ mode }: { mode: ViewMode }) {
           <Link to="/profile" className={buttonClasses('secondary')}>
             Accessibility settings
           </Link>
-          <Link to={mode === '3d' ? '/mission' : '/mission3d'} className={buttonClasses('secondary')} onClick={sim.saveNow}>
+          <Link to={mode === '3d' ? '/mission2d' : '/mission'} className={buttonClasses('secondary')} onClick={sim.saveNow}>
             {mode === '3d' ? 'Switch to the 2D view' : 'Switch to the 3D view'}
           </Link>
           <Button
@@ -504,7 +504,7 @@ function StationGame({ mode }: { mode: ViewMode }) {
   );
 }
 
-/** The Mission page: the station game, or a friendly locked screen before Module 1 is passed. */
+/** /mission2d: the station game in 2D (Phaser), or a friendly locked screen before Module 1 is passed. The game opens in 3D by default (Mission3DPage). */
 export default function MissionPage() {
   return <MissionGame mode="2d" />;
 }

@@ -29,7 +29,7 @@ If the storm has already passed, skip that row and show the storm text on the Da
 |---|---|
 | **Mission Control** | Dashboard: NOLA's greeting, the student's astronaut, training progress, and which station systems are online |
 | **NOLA Academy** | Eight modules. Each lesson has six stages: NOLA Introduces, Learn, Explore (a hands-on activity), Knowledge Check (quiz), Mission Challenge, Unlock |
-| **NOLA Mission** | A top-down 2D Mars base. A 30-sol mission: a plan each morning at the Command Console, urgent jobs at the machines, and a night that uses up air, water, food and power. Radiation storms from real NASA solar events, radio delays to Earth, crew muscles and rest, repair mini-games, a tutorial sol, a summary each evening and a debrief at the end |
+| **NOLA Mission** | A Mars base you walk around, in 3D by default (a high-angle diagonal view) or in 2D. A 30-sol mission: a plan each morning at the Command Console, urgent jobs at the machines, and a night that uses up air, water, food and power. Radiation storms from real NASA solar events, radio delays to Earth, crew muscles and rest, repair mini-games, a tutorial sol, a summary each evening and a debrief at the end |
 | **Ask NOLA** | Chat with the companion. A calculator for space maths, answers from the lessons and a 541-entry space corpus, and an optional AI model behind a secure backend, limited to space topics |
 | **Astronaut Profile** | Avatar editor, rank (Cadet to Commander), concept badges, achievements, learning history, accessibility settings, restart options |
 | **Data sources** | Every NASA dataset used, and every game number marked real or simplified (open to everyone at `/data-sources`) |
@@ -151,7 +151,7 @@ Measured on the production build in headless Chrome:
 
 - **React + TypeScript + Vite** – the website. TypeScript catches many mistakes before the code runs.
 - **Tailwind CSS** – styling, with NOLA's colours and fonts defined once in `src/index.css`.
-- **Phaser 3** – the 2D game. Downloaded only when the Mission page is opened.
+- **three.js** – the 3D game view (the default). **Phaser 3** – the 2D game view. Each is downloaded only when its view is opened.
 - **Firebase Authentication + Cloud Firestore** – accounts and each student's data.
 - **Vercel functions** – four small server programs: the AI chat, the NASA space-weather summary, real solar events for radiation storms, and the live check of the OSDR studies.
 - **OpenRouter (free models) or Google Gemini** – the optional AI model behind NOLA's chat, called only from the server.
@@ -263,6 +263,12 @@ Run its tests with `npx vitest run src/sol`.
 - **Ranks**, Cadet → Crew Member → Flight Engineer → Mission Specialist → Commander, from rank points: 1 per Academy module, 2 per badge, 5 for completing a mission. Commander also needs a completed mission scoring at least 60, so it takes good reasoning, not just time. Badges, best score and completed missions are saved at `users/{uid}/simulation/record`, so restarting the station keeps them; restarting the whole course clears them.
 - **Read-aloud friendly.** Summaries, debrief, explainers and tutorial steps have Listen buttons with text written for speech (short sentences, amounts in words such as "8 kWh of power", no symbols a voice would stumble on; a test checks the explainers).
 - **Colour-blind safe.** Good and bad are never shown by colour alone: arrows, ticks, locks, stars, the words LOW / up / down and numbers always go with them. The new "Colour-blind friendly colours" setting also swaps green and red for sky blue and amber (Okabe–Ito palette).
+
+## 3D and 2D views
+
+**NOLA Mission** (`/mission`) opens in **3D**; the **2D view** button switches to the Phaser version (`/mission2d`), and **3D view** switches back. Both play the same game on the same save: missions, tasks, sols, storms, Mission Control calls and crew health are shared, because both views talk to the game only through `GameBridge`. Old `/mission3d` links forward to `/mission`.
+
+The 3D view (`src/game3d/`): a perspective camera (field of view 35) at a fixed offset of (6, 10, 6), about 50 degrees down and turned 45 degrees, following the astronaut with a 0.12-second damped lag; Q / R (or the Turn slot) snap it 90 degrees. Movement is relative to the screen. Rooms are cut away toward the camera (low walls in front, tall walls behind), and anything that hides the astronaut fades to 25%. It has warm wall lamps (four real lights that follow the astronaut), one small shadow map on High, fog, a CSS vignette and drifting dust, plus a walking animation, light beams and floor rings over task machines, and edge arrows to off-screen tasks. All art is original blocky shapes. A Low / High switch trades looks for speed; pixel ratio is capped at 1.5.
 
 ## Guest mode (test mode)
 

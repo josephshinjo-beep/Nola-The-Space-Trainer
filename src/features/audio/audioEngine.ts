@@ -28,7 +28,7 @@ export const FOOTSTEPS = '/audio/footsteps.mp3';
 /** Which music belongs to a page: the Academy has its theme, the station game its simulation music, everything else the lobby music. */
 export function musicForPath(pathname: string): MusicId {
   if (pathname === '/academy' || pathname.startsWith('/academy/')) return 'module';
-  if (pathname === '/mission' || pathname === '/mission3d') return 'simulation';
+  if (pathname === '/mission' || pathname === '/mission2d') return 'simulation';
   return 'lobby';
 }
 

@@ -1,5 +1,5 @@
 import { lazy, Suspense } from 'react';
-import { BrowserRouter, Route, Routes } from 'react-router';
+import { BrowserRouter, Navigate, Route, Routes } from 'react-router';
 import { SettingsProvider } from '../features/accessibility/SettingsContext';
 import { AuthProvider } from '../features/auth/AuthContext';
 import { SoundDirector } from '../features/audio/SoundDirector';
@@ -56,8 +56,10 @@ export default function App() {
                 <Route path="/academy" element={page(<AcademyPage />)} />
                 <Route path="/academy/:moduleId" element={page(<ModulePage />)} />
                 <Route path="/academy/:moduleId/lesson" element={page(<LessonPage />)} />
-                <Route path="/mission" element={page(<MissionPage />)} />
-                <Route path="/mission3d" element={page(<Mission3DPage />)} />
+                {/* The game opens in 3D; the 2D view is one button away. Old /mission3d links still work. */}
+                <Route path="/mission" element={page(<Mission3DPage />)} />
+                <Route path="/mission2d" element={page(<MissionPage />)} />
+                <Route path="/mission3d" element={<Navigate to="/mission" replace />} />
                 <Route path="/companion" element={page(<CompanionPage />)} />
                 <Route path="/profile" element={page(<ProfilePage />)} />
               </Route>
