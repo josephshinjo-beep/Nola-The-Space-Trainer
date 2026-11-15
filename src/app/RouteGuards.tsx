@@ -1,5 +1,6 @@
 import { Navigate, Outlet, useLocation } from 'react-router';
 import { useAuth } from '../features/auth/AuthContext';
+import { LoadingBar, OrbitSpinner } from '../components/Loader';
 import { NolaMascot } from '../features/companion/NolaMascot';
 
 /** Shown for the brief moment while Firebase checks for a saved session. */
@@ -7,7 +8,10 @@ function LoadingScreen() {
   return (
     <div role="status" className="flex min-h-dvh flex-col items-center justify-center gap-6">
       <NolaMascot mood="curious" size={140} />
-      <p className="font-display text-2xl">Powering up the station…</p>
+      <p className="flex items-center gap-3 font-display text-2xl">
+        <OrbitSpinner size={40} className="text-glow" /> Powering up the station…
+      </p>
+      <LoadingBar className="max-w-xs" />
     </div>
   );
 }

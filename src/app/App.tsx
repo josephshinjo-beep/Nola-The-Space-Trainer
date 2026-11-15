@@ -1,3 +1,4 @@
+import { Loader } from '../components/Loader';
 import { lazy, Suspense } from 'react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router';
 import { SettingsProvider } from '../features/accessibility/SettingsContext';
@@ -26,11 +27,7 @@ const DataSourcesPage = lazy(() => import('../pages/DataSourcesPage').then((m) =
 /** Shows a short message while a page's code downloads. */
 const page = (element: React.ReactNode) => (
   <Suspense
-    fallback={
-      <p role="status" className="p-6 text-xl text-mist">
-        Loading…
-      </p>
-    }
+    fallback={<Loader label="Loading…" />}
   >
     {element}
   </Suspense>

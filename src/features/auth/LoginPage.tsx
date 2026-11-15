@@ -1,3 +1,4 @@
+import { OrbitSpinner } from '../../components/Loader';
 import { useState, type FormEvent } from 'react';
 import { FlaskConical } from 'lucide-react';
 import { Link, useLocation } from 'react-router';
@@ -76,14 +77,26 @@ export function LoginPage() {
         />
         <FormError message={formError} />
         <Button type="submit" disabled={busy} className="w-full">
-          {busy ? 'Opening the airlock…' : 'Log in'}
+          {busy ? (
+            <>
+              <OrbitSpinner size={22} /> Opening the airlock…
+            </>
+          ) : (
+            'Log in'
+          )}
         </Button>
       </form>
 
       <div className="mt-6 rounded-2xl border-2 border-dashed border-line p-4">
         <Button variant="secondary" className="w-full" disabled={guestBusy} onClick={() => void tryAsGuest()}>
           <FlaskConical aria-hidden="true" size={20} />
-          {guestBusy ? 'Opening the airlock…' : 'Try as a guest (test mode)'}
+          {guestBusy ? (
+            <>
+              <OrbitSpinner size={22} /> Opening the airlock…
+            </>
+          ) : (
+            'Try as a guest (test mode)'
+          )}
         </Button>
         <p className="mt-2 text-sm text-mist">No email or password. Your progress is kept in this browser until you create an account or leave guest mode.</p>
         <FormError message={guestError} />

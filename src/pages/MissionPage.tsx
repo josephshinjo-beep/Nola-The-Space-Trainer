@@ -1,3 +1,4 @@
+import { GameLoader, resetGameLoader } from '../components/Loader';
 import { useImmersive } from '../app/immersive';
 import { Box, Volume2, VolumeX } from 'lucide-react';
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -275,9 +276,9 @@ function StationGame({ mode }: { mode: ViewMode }) {
   }
   if (!state) {
     return (
-      <p role="status" className="p-6 text-xl text-mist">
-        Powering up your station…
-      </p>
+      <div className="relative h-full bg-void">
+        <GameLoader step={1} />
+      </div>
     );
   }
 
@@ -287,12 +288,9 @@ function StationGame({ mode }: { mode: ViewMode }) {
   return (
     <div className="relative h-full overflow-hidden bg-void">
       <Suspense
-        fallback={
-          <p role="status" className="p-6 text-xl text-mist">
-            Loading the station…
-          </p>
-        }
+        fallback={<GameLoader step={2} />}
       >
+        <GameLoaded />
         {mode === '3d' ? <Station3DView bridge={bridge} quality={quality} name={profile?.displayName} onFps={setFps} /> : <PhaserGame bridge={bridge} />}
       </Suspense>
 
@@ -526,6 +524,12 @@ function StationGame({ mode }: { mode: ViewMode }) {
   );
 }
 
+/** Mounts only once the game's code has arrived (it sits inside the Suspense), so the next load starts its bar from zero. */
+function GameLoaded() {
+  useEffect(() => resetGameLoader(), []);
+  return null;
+}
+
 /** /mission2d: the station game in 2D (Phaser), or a friendly locked screen before Module 1 is passed. The game opens in 3D by default (Mission3DPage). */
 export default function MissionPage() {
   return <MissionGame mode="2d" />;
@@ -538,9 +542,9 @@ export function MissionGame({ mode }: { mode: ViewMode }) {
 
   if (!loaded) {
     return (
-      <p role="status" className="p-6 text-xl text-mist">
-        Checking your training record…
-      </p>
+      <div className="relative h-full min-h-[60dvh] bg-void">
+        <GameLoader step={0} />
+      </div>
     );
   }
 

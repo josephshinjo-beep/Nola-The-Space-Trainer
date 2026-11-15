@@ -1,3 +1,4 @@
+import { Loader } from '../../components/Loader';
 import { useState } from 'react';
 import { OptionGroup, type Option } from '../../components/OptionGroup';
 import { updateAvatar } from '../../services/userRepository';
@@ -36,7 +37,7 @@ export function AvatarEditor() {
   const { user, profile } = useAuth();
   const [status, setStatus] = useState<'idle' | 'saved' | 'error'>('idle');
 
-  if (!user || !profile) return <p className="text-mist">Loading your astronaut…</p>;
+  if (!user || !profile) return <Loader variant="inline" label="Loading your astronaut…" />;
   const avatar = profile.avatar;
 
   function change(changes: Partial<AvatarConfig>) {

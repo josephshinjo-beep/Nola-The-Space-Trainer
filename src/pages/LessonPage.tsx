@@ -1,3 +1,4 @@
+import { Loader } from '../components/Loader';
 import { useEffect, useState } from 'react';
 import { Link, useParams } from 'react-router';
 import { buttonClasses } from '../components/Button';
@@ -42,9 +43,7 @@ export function LessonPage() {
 
   if (!loaded || !lesson) {
     return (
-      <p role="status" className="text-xl text-mist">
-        Loading your lesson…
-      </p>
+      <Loader label="Loading your lesson…" />
     );
   }
 

@@ -1,3 +1,4 @@
+import { Loader } from '../../components/Loader';
 import { Award, Check, Lock, Rocket } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import type { StationStats } from '../../features/academy/achievements';
@@ -26,7 +27,7 @@ export function RankPanel({ uid, station }: { uid: string | undefined; station: 
   }, [uid]);
   const { rank, badges, record, loaded } = useMissionRecord(uid, sol, station, completedModuleIds);
   const step = RANKS.findIndex((r) => r.title === rank.title);
-  if (!loaded) return <p role="status" className="text-lg text-mist">Loading your rank and badges…</p>;
+  if (!loaded) return <Loader variant="inline" label="Loading your rank and badges…" />;
 
   return (
     <div className="space-y-5">

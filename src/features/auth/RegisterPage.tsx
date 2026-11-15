@@ -1,3 +1,4 @@
+import { OrbitSpinner } from '../../components/Loader';
 import { useState, type FormEvent } from 'react';
 import { Link, useLocation } from 'react-router';
 import { Button } from '../../components/Button';
@@ -79,7 +80,13 @@ export function RegisterPage() {
         />
         <FormError message={formError} />
         <Button type="submit" disabled={busy} className="w-full">
-          {busy ? 'Preparing your station…' : 'Start training'}
+          {busy ? (
+            <>
+              <OrbitSpinner size={22} /> Preparing your station…
+            </>
+          ) : (
+            'Start training'
+          )}
         </Button>
       </form>
 

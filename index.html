@@ -9,7 +9,32 @@
     <title>NOLA – Space Trainer</title>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- Shown until the app's code has loaded; React replaces it. Plain HTML and CSS, so it appears at once. -->
+      <div class="boot" role="status">
+        <svg viewBox="0 0 48 48" width="76" height="76" aria-hidden="true">
+          <circle cx="24" cy="24" r="17" fill="none" stroke="#a9b4da" stroke-opacity=".25" stroke-width="2" stroke-dasharray="3 5" />
+          <circle cx="24" cy="24" r="9" fill="#18224a" stroke="#3de0f5" stroke-width="2.5" />
+          <g class="boot-orbit"><circle cx="24" cy="7" r="4" fill="#ff7a1a" /><circle cx="24" cy="7" r="7" fill="#ff7a1a" fill-opacity=".2" /></g>
+        </svg>
+        <p>NOLA <span>Space Trainer</span></p>
+        <div class="boot-bar" aria-hidden="true"><i></i></div>
+        <span class="boot-sr">Loading NOLA Space Trainer…</span>
+      </div>
+    </div>
+    <style>
+      body { margin: 0; background: #070b1f; }
+      .boot { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 18px; background: radial-gradient(ellipse at 50% 40%, #141a45, #070b1f 70%); color: #f4f7ff; font-family: system-ui, sans-serif; }
+      .boot p { margin: 0; font-size: 28px; font-weight: 700; letter-spacing: .04em; text-align: center; }
+      .boot p span { display: block; margin-top: 4px; font-size: 11px; letter-spacing: .3em; text-transform: uppercase; color: #3de0f5; text-align: center; }
+      .boot-orbit { transform-origin: 24px 24px; animation: boot-spin 1.6s linear infinite; }
+      .boot-bar { position: relative; width: 220px; height: 8px; overflow: hidden; border-radius: 99px; border: 1px solid #2b3a75; background: #070b1f; }
+      .boot-bar i { position: absolute; top: 0; bottom: 0; width: 40%; border-radius: 99px; background: linear-gradient(90deg, transparent, #3de0f5, transparent); animation: boot-sweep 1.3s ease-in-out infinite; }
+      .boot-sr { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); }
+      @keyframes boot-spin { to { transform: rotate(360deg); } }
+      @keyframes boot-sweep { from { left: -40%; } to { left: 100%; } }
+      @media (prefers-reduced-motion: reduce) { .boot-orbit, .boot-bar i { animation: none; } .boot-bar i { left: 30%; } }
+    </style>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
